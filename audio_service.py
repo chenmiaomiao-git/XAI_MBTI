@@ -4,7 +4,7 @@
 """
 音频处理服务模块
 提供语音识别(ASR)和语音合成(TTS)功能
-基于百度云API实现
+基于百度云API和火山引擎API实现
 """
 
 import requests
@@ -16,7 +16,8 @@ import soundfile as sf
 import numpy as np
 
 # 导入配置
-from config import BAIDU_API_KEY, BAIDU_SECRET_KEY, DEFAULT_VOICE_SPEED, DEFAULT_VOICE_PITCH, DEFAULT_VOICE_VOLUME, DEFAULT_VOICE_PERSON
+from config import (BAIDU_API_KEY, BAIDU_SECRET_KEY, DEFAULT_VOICE_SPEED, DEFAULT_VOICE_PITCH, 
+                   DEFAULT_VOICE_VOLUME, DEFAULT_VOICE_PERSON, VOLCANO_APP_ID, VOLCANO_ACCESS_TOKEN, VOLCANO_SECRET_KEY)
 
 class AudioService:
     """音频处理服务类"""
@@ -132,8 +133,12 @@ class AudioService:
         return result
     
     @classmethod
-    def tts_synthesize(cls, text, spd=DEFAULT_VOICE_SPEED, pit=DEFAULT_VOICE_PITCH, vol=DEFAULT_VOICE_VOLUME, per=DEFAULT_VOICE_PERSON):
+    def tts_synthesize(cls, text, spd=DEFAULT_VOICE_SPEED, pit=DEFAULT_VOICE_PITCH, vol=DEFAULT_VOICE_VOLUME, per=DEFAULT_VOICE_PERSON, tts_engine="baidu"):
         """语音合成(TTS)"""
+        if tts_engine == "volcano":
+            return cls.volcano_tts_synthesize(text)
+        
+        # 默认使用百度云TTS
         token = cls.get_baidu_access_token()
         if not token:
             return None
@@ -161,6 +166,78 @@ class AudioService:
         else:
             print(f"语音合成失败: {response.text}")
             return None
+            
+    @classmethod
+    def volcano_tts_synthesize(cls, text):
+        """使用火山引擎进行语音合成"""
+        import json
+        import time
+        import uuid
+        import hmac
+        import hashlib
+        
+        # 火山引擎TTS API地址
+        url = f"https://openspeech.bytedance.com/api/v1/tts?token={VOLCANO_ACCESS_TOKEN}"
+        
+        # 生成唯一请求ID
+        req_id = str(uuid.uuid4())
+        
+        # 准备请求体
+        request_data = {
+            "app": {
+                "appid": VOLCANO_APP_ID,
+                "token": "",  # 使用签名认证，token为空
+                "cluster": "volcano_tts"  # 根据文档使用正确的cluster值
+            },
+            "user": {
+                "uid": "user_" + str(int(time.time()))
+            },
+            "audio": {
+                "voice_type": "BV700_streaming",  # 使用文档中的示例音色
+                "encoding": "mp3",
+                "rate": 24000,
+                "speed_ratio": 1.0,  # 语速，范围：0.2~3.0
+                "volume_ratio": 1.0,  # 音量，范围：0.1~3.0
+                "pitch_ratio": 1.0,   # 音调，范围：0.1~3.0
+                "language": "cn"      # 指定语言
+            },
+            "request": {
+                "reqid": req_id,
+                "text": text,
+                "text_type": "plain",
+                "operation": "query",
+                "silence_duration": 125
+            }
+        }
+        
+        # 设置请求头 - 使用正确的Bearer Token格式（注意是分号而不是空格）
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer;{VOLCANO_ACCESS_TOKEN}"
+        }
+        
+        try:
+            response = requests.post(url, headers=headers, json=request_data)
+            if response.status_code == 200:
+                result = response.json()
+                # 根据文档，成功状态码是3000
+                if result.get("code") == 3000 and result.get("data"):
+                    # 解码Base64音频数据
+                    audio_data = base64.b64decode(result["data"])
+                    
+                    # 创建临时文件保存音频
+                    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
+                    temp_file.write(audio_data)
+                    temp_file.close()
+                    return temp_file.name
+                else:
+                    print(f"火山引擎语音合成失败: {result}")
+            else:
+                print(f"火山引擎语音合成请求失败: {response.text}")
+        except Exception as e:
+            print(f"火山引擎语音合成异常: {e}")
+            
+        return None
 
 # 测试代码
 if __name__ == "__main__":
