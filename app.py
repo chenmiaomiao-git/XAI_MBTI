@@ -530,11 +530,11 @@ def create_interface():
                     
                     # 上传按钮（小列，固定宽度）
                     with gr.Column(scale=1, min_width=50):
-                        upload_btn = gr.UploadButton("➕", file_types=["audio/*"], size="sm")  # 仅接受音频文件
+                        upload_btn = gr.UploadButton("➕", file_types=["audio/*"], size="lg")  # 仅接受音频文件
                     
                     # 发送按钮（小列，固定宽度）
                     with gr.Column(scale=1, min_width=50):
-                        submit_btn = gr.Button("Send", variant="primary", size="sm")  # 主要按钮样式
+                        submit_btn = gr.Button("Send", variant="primary", size="lg")  # 主要按钮样式
                         
                 # 添加JavaScript代码，用于音频录制控制和UI增强
                 mic_js = """
@@ -682,7 +682,7 @@ def create_interface():
                 
                 # 简化的语音回复播放组件
                 audio_output = gr.Audio(
-                    label=None,  # 移除标签
+                    label="Voice Output",  # 移除标签
                     visible=True, 
                     autoplay=True, 
                     type="filepath",  # 使用文件路径类型
@@ -1099,6 +1099,14 @@ def create_interface():
         /* 麦克风按钮悬停放大效果 */
         #mic_button:hover {
             transform: scale(1.1);              /* 放大效果 */
+        }
+        
+        /* 隐藏麦克风选择下拉菜单 */
+        .mic-wrap select, 
+        .mic-wrap .wrap-inner > div:first-child,
+        #mic_input .wrap-inner > div:first-child,
+        #mic_input select {
+            display: none !important;
         }
         </style>
         """)
