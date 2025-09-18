@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 
 """
-聊天服务模块
-处理与API的交互，发送聊天请求并处理响应
+Chat service module
+Handles API interactions, sends chat requests and processes responses
 """
 
 import requests
@@ -11,26 +11,26 @@ import json
 from datetime import datetime
 from typing import List, Tuple, Optional, Dict, Any
 
-# 导入配置
+# Import configuration
 from config import API_BASE_URL, CHAT_ENDPOINT, CHAT_STREAM_ENDPOINT, DEFAULT_LORA_PATH, DEFAULT_PROMPT_CHOICE, DEFAULT_FORMAT_CHOICE
 
 class ChatService:
-    """聊天服务类"""
+    """Chat service class"""
     
     @staticmethod
     def send_chat_request(message, history=None, lora_path=DEFAULT_LORA_PATH, prompt_choice=DEFAULT_PROMPT_CHOICE, promptFormat_choice=DEFAULT_FORMAT_CHOICE, use_stream=False):
-        """发送聊天请求
+        """Send chat request
         
         Args:
-            message: 用户消息
-            history: 聊天历史记录
-            lora_path: 模型路径，可选值："estj", "infp", "base_1", "base_2"
-            prompt_choice: 提示词选择，可选值："assist_estj", "assist_infp", "null"
-            promptFormat_choice: 格式选择，可选值："ordinary", "custom"
-            use_stream: 是否使用流式API
+            message: User message
+            history: Chat history
+            lora_path: Model path, options: "estj", "infp", "base_1", "base_2"
+            prompt_choice: Prompt selection, options: "assist_estj", "assist_infp", "null"
+            promptFormat_choice: Format selection, options: "ordinary", "custom"
+            use_stream: Whether to use streaming API
             
         Returns:
-            聊天响应对象
+            Chat response object
         """
         if history is None:
             history = []
@@ -51,18 +51,18 @@ class ChatService:
             if response.status_code == 200:
                 return response.json()
             else:
-                print(f"API请求失败: {response.text}")
+                print(f"API request failed: {response.text}")
                 return {
-                    "reply": "API请求失败，请稍后再试", 
+                    "reply": "API request failed, please try again later", 
                     "history": history,
                     "lora_path": lora_path,
                     "timestamp": datetime.now().isoformat(),
                     "session_id": payload["session_id"]
                 }
         except Exception as e:
-            print(f"发送聊天请求异常: {e}")
+            print(f"Chat request exception: {e}")
             return {
-                "reply": "发送请求时发生错误，请检查网络连接", 
+                "reply": "Error occurred while sending request, please check network connection", 
                 "history": history,
                 "lora_path": lora_path,
                 "timestamp": datetime.now().isoformat(),
@@ -71,60 +71,60 @@ class ChatService:
     
     @staticmethod
     def get_available_models():
-        """获取可用的模型列表"""
+        """Get available model list"""
         try:
             response = requests.get(f"{API_BASE_URL}/model_templates")
             if response.status_code == 200:
                 return response.json()
             else:
-                print(f"获取模型列表失败: {response.text}")
-                return {"estj": "ESTJ人格模型", "infp": "INFP人格模型", "base_1": "基础模型1", "base_2": "基础模型2"}
+                print(f"Failed to get model list: {response.text}")
+                return {"estj": "ESTJ Personality Model", "infp": "INFP Personality Model", "base_1": "Base Model 1", "base_2": "Base Model 2"}
         except Exception as e:
-            print(f"获取模型列表异常: {e}")
-            return {"estj": "ESTJ人格模型", "infp": "INFP人格模型", "base_1": "基础模型1", "base_2": "基础模型2"}
+            print(f"Get model list exception: {e}")
+            return {"estj": "ESTJ Personality Model", "infp": "INFP Personality Model", "base_1": "Base Model 1", "base_2": "Base Model 2"}
     
     @staticmethod
     def get_prompt_templates():
-        """获取提示词模板列表"""
+        """Get prompt template list"""
         try:
             response = requests.get(f"{API_BASE_URL}/prompt_templates")
             if response.status_code == 200:
                 return response.json()
             else:
-                print(f"获取提示词模板失败: {response.text}")
-                return {"assist_estj": "ESTJ助手", "assist_infp": "INFP助手", "base": "基础提示词"}
+                print(f"Failed to get prompt templates: {response.text}")
+                return {"assist_estj": "ESTJ Assistant", "assist_infp": "INFP Assistant", "base": "Base Prompt"}
         except Exception as e:
-            print(f"获取提示词模板异常: {e}")
-            return {"assist_estj": "ESTJ助手", "assist_infp": "INFP助手", "base": "基础提示词"}
+            print(f"Get prompt templates exception: {e}")
+            return {"assist_estj": "ESTJ Assistant", "assist_infp": "INFP Assistant", "base": "Base Prompt"}
     
     @staticmethod
     def get_promptFormat_templates():
-        """获取格式模板列表"""
+        """Get format template list"""
         try:
             response = requests.get(f"{API_BASE_URL}/promptFormat_templates")
             if response.status_code == 200:
                 return response.json()
             else:
-                print(f"获取格式模板失败: {response.text}")
-                return {"ordinary": "普通格式", "custom": "自定义格式"}
+                print(f"Failed to get format templates: {response.text}")
+                return {"ordinary": "Ordinary Format", "custom": "Custom Format"}
         except Exception as e:
-            print(f"获取格式模板异常: {e}")
-            return {"ordinary": "普通格式", "custom": "自定义格式"}
+            print(f"Get format templates exception: {e}")
+            return {"ordinary": "Ordinary Format", "custom": "Custom Format"}
 
-# 测试代码
+# Test code
 if __name__ == "__main__":
-    # 测试聊天请求
-    response = ChatService.send_chat_request("你好，请介绍一下你自己")
-    print(f"聊天响应: {response['reply']}")
+    # Test chat request
+    response = ChatService.send_chat_request("Hello, please introduce yourself")
+    print(f"Chat response: {response['reply']}")
     
-    # 测试获取模型列表
+    # Test get model list
     models = ChatService.get_available_models()
-    print(f"可用模型: {models}")
+    print(f"Available models: {models}")
     
-    # 测试获取提示词模板
+    # Test get prompt templates
     prompts = ChatService.get_prompt_templates()
-    print(f"提示词模板: {prompts}")
+    print(f"Prompt templates: {prompts}")
     
-    # 测试获取格式模板
+    # Test get format templates
     formats = ChatService.get_promptFormat_templates()
-    print(f"格式模板: {formats}")
+    print(f"Format templates: {formats}")

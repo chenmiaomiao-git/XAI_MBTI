@@ -22,37 +22,37 @@ import time
 
 # 音频文件检查函数
 def check_audio_file(file_path):
-    """检查音频文件是否有效并返回详细信息"""
+    """Check if audio file is valid and return detailed information"""
     if not file_path:
-        return {"valid": False, "error": "文件路径为空"}
+        return {"valid": False, "error": "File path is empty"}
     
     try:
         if not os.path.exists(file_path):
-            return {"valid": False, "error": "文件不存在", "path": file_path}
+            return {"valid": False, "error": "File does not exist", "path": file_path}
         
         file_size = os.path.getsize(file_path)
         if file_size == 0:
-            return {"valid": False, "error": "文件大小为0", "path": file_path, "size": 0}
+            return {"valid": False, "error": "File size is 0", "path": file_path, "size": 0}
         
-        # 尝试读取文件头部，检查是否为有效的MP3文件
+        # Try to read file header to check if it's a valid MP3 file
         with open(file_path, "rb") as f:
             header = f.read(4)
             # MP3文件可能的头部格式：
             # - ID3标签开头
             # - MPEG帧头开头（各种变体）
             is_mp3 = (
-                header.startswith(b"ID3") or  # ID3标签
-                (header[0] == 0xff and (header[1] & 0xe0) == 0xe0)  # MPEG帧头：前11位都是1
+                header.startswith(b"ID3") or  # ID3 tag
+                (header[0] == 0xff and (header[1] & 0xe0) == 0xe0)  # MPEG frame header: first 11 bits are all 1
             )
             
             if not is_mp3:
-                # 对于火山引擎等TTS服务，可能返回其他有效的音频格式
-                # 如果文件大小合理，我们认为它是有效的
-                if file_size > 1000:  # 至少1KB的音频数据
-                    print(f"音频文件验证: 文件头部不是标准MP3格式但文件大小合理，认为有效: {header.hex()}")
+                # For TTS services like Volcano Engine, other valid audio formats may be returned
+                # If file size is reasonable, we consider it valid
+                if file_size > 1000:  # At least 1KB of audio data
+                    print(f"Audio file validation: File header is not standard MP3 format but file size is reasonable, considered valid: {header.hex()}")
                     is_mp3 = True
                 else:
-                    return {"valid": False, "error": "不是有效的MP3文件", "path": file_path, "size": file_size, "header": header.hex()}
+                    return {"valid": False, "error": "Not a valid MP3 file", "path": file_path, "size": file_size, "header": header.hex()}
         
         return {"valid": True, "path": file_path, "size": file_size}
     except Exception as e:
@@ -60,36 +60,36 @@ def check_audio_file(file_path):
 
 # 测试音频文件可访问性函数
 def test_audio_accessibility(file_path):
-    """测试音频文件是否可以被Web服务器访问"""
+    """Test if audio file can be accessed by web server"""
     if not file_path or not os.path.exists(file_path):
-        return {"accessible": False, "error": "文件不存在"}
+        return {"accessible": False, "error": "File does not exist"}
     
     try:
-        # 检查文件权限
+        # Check file permissions
         file_stat = os.stat(file_path)
         file_mode = oct(file_stat.st_mode)[-3:]
         
-        # 检查文件是否可读
+        # Check if file is readable
         readable = os.access(file_path, os.R_OK)
         
-        # 获取文件的绝对路径
+        # Get absolute path of file
         abs_path = os.path.abspath(file_path)
         
-        # 检查文件是否在临时目录中
+        # Check if file is in temporary directory
         temp_dir = tempfile.gettempdir()
         in_temp_dir = abs_path.startswith(temp_dir)
         
-        # 创建一个符号链接到静态目录，使文件可通过Web访问（仅用于测试）
+        # Create a symbolic link to static directory to make file accessible via web (for testing only)
         static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
         if not os.path.exists(static_dir):
             os.makedirs(static_dir, exist_ok=True)
         
         link_path = os.path.join(static_dir, os.path.basename(file_path))
         try:
-            # 如果链接已存在，先删除
+            # If link already exists, delete it first
             if os.path.exists(link_path):
                 os.remove(link_path)
-            # 创建硬链接（不是符号链接，因为某些系统可能限制符号链接）
+            # Create hard link (not symbolic link, as some systems may restrict symbolic links)
             os.link(file_path, link_path)
             link_created = True
         except Exception as e:
@@ -192,8 +192,8 @@ def handle_chat(message, history, lora_path, prompt_choice, promptFormat_choice,
             if isinstance(audio, str):
                 # 如果音频是字符串路径，验证它是文件而不是目录
                 if not os.path.isfile(audio):
-                    print(f"无效的音频文件路径: {audio}")
-                    return history + [("<audio controls style='display:none;'></audio>", "无效的音频文件")], history, None, ""
+                    print(f"Invalid audio file path: {audio}")
+                    return history + [("<audio controls style='display:none;'></audio>", "Invalid audio file")], history, None, ""
                 audio_file_path = audio
                 # 创建临时文件用于后续处理
                 temp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
@@ -208,8 +208,8 @@ def handle_chat(message, history, lora_path, prompt_choice, promptFormat_choice,
                 temp_audio.close()
             else:
                 # 不支持的音频格式，返回错误信息
-                print(f"音频格式错误: {type(audio)}, 内容: {audio}")
-                return history + [("<audio controls style='display:none;'></audio>", "录音格式错误，请重试")], history, None, ""
+                print(f"Audio format error: {type(audio)}, content: {audio}")
+                return history + [("<audio controls style='display:none;'></audio>", "Recording format error, please try again")], history, None, ""
             
             # 保存一个永久副本用于前端播放
             timestamp = int(time.time())  # 使用时间戳确保文件名唯一
@@ -231,27 +231,27 @@ def handle_chat(message, history, lora_path, prompt_choice, promptFormat_choice,
             # 检查语音识别结果，如果失败则返回错误信息
             # 检查所有可能的错误返回值
             error_messages = [
-                "语音识别失败", 
-                "语音识别请求失败", 
-                "语音识别请求超时",
-                "语音识别网络请求失败",
-                "音频格式转换失败",
-                "读取音频文件失败",
-                "音频数据处理失败",
+                "Speech recognition failed", 
+                "Speech recognition request failed", 
+                "Speech recognition request timeout",
+                "Speech recognition network request failed",
+                "Audio format conversion failed",
+                "Failed to read audio file",
+                "Audio data processing failed",
                 "Unable to get Baidu access token"
             ]
             
             if not message or message in error_messages:
                 # 确保audio_path已定义，如果未定义则使用空字符串
                 audio_display = f"<audio src='/{audio_path}' controls style='display:none;'></audio>" if audio_path else "<audio controls style='display:none;'></audio>"
-                error_msg = message if message else "语音识别失败"
-                return history + [(audio_display, f"{error_msg}，请重试")], history, None, ""
+                error_msg = message if message else "Speech recognition failed"
+                return history + [(audio_display, f"{error_msg}, please try again")], history, None, ""
         except Exception as e:
             # 捕获并处理音频处理过程中的任何异常
-            print(f"处理录音时出错: {e}")
+            print(f"Error processing recording: {e}")
             # 确保audio_path已定义，如果未定义则使用空字符串
             audio_display = f"<audio src='/{audio_path}' controls style='display:none;'></audio>" if audio_path else "<audio controls style='display:none;'></audio>"
-            return history + [(audio_display, f"处理录音时出错: {str(e)}")], history, None, ""
+            return history + [(audio_display, f"Error processing recording: {str(e)}")], history, None, ""
     
     # 如果消息为空，不进行处理直接返回
     if not message or message.strip() == "":
@@ -290,61 +290,61 @@ def handle_chat(message, history, lora_path, prompt_choice, promptFormat_choice,
     reply = response.get("reply", "Sorry, the server did not return a valid reply")
     
     # 根据选择的TTS风格进行语音合成
-    print(f"音频播放调试: 开始语音合成，TTS选择 = {tts_choice}, 回复语言 = {reply_language_choice}")
-    print(f"音频播放调试: 回复文本长度 = {len(reply)}")
+    print(f"Audio playback debug: Starting speech synthesis, TTS choice = {tts_choice}, reply language = {reply_language_choice}")
+    print(f"Audio playback debug: Reply text length = {len(reply)}")
     
     # 中文语言使用百度云TTS，其他语言使用火山引擎TTS
     if reply_language_choice == "Chinese":
         if tts_choice == "Soft Female Voice - Cancan (Normal)":
             # 中文-使用百度云TTS - 女声，标准语速和音调
-            print("音频播放调试: 使用百度云TTS - 女声，标准语速和音调")
+            print("Audio playback debug: Using Baidu Cloud TTS - Female voice, standard speed and pitch")
             audio_file_path = AudioService.tts_synthesize(reply, language=reply_language_choice, 
                                                   spd=5, pit=5, per=0)
         elif tts_choice == "Energetic Female Voice - Cancan (Fast)":
             # 中文-使用百度云TTS - 女声，快速语速和高音调
-            print("音频播放调试: 使用百度云TTS - 女声，快速语速和高音调")
+            print("Audio playback debug: Using Baidu Cloud TTS - Female voice, fast speed and high pitch")
             audio_file_path = AudioService.tts_synthesize(reply, language=reply_language_choice, 
                                                   spd=7, pit=6, per=0)
         elif tts_choice == "Professional Foreign Voice - Stefan (Normal)":
             # 中文-使用百度云TTS - 男声，标准语速和音调
-            print("音频播放调试: 使用百度云TTS - 男声，标准语速和音调")
+            print("Audio playback debug: Using Baidu Cloud TTS - Male voice, standard speed and pitch")
             audio_file_path = AudioService.tts_synthesize(reply, language=reply_language_choice, 
                                                   spd=5, pit=5, per=1)
         elif tts_choice == "Expressive Foreign Voice - Stefan (Fast)":
             # 中文-使用百度云TTS - 男声，快速语速和高音调
-            print("音频播放调试: 使用百度云TTS - 男声，快速语速和高音调")
+            print("Audio playback debug: Using Baidu Cloud TTS - Male voice, fast speed and high pitch")
             audio_file_path = AudioService.tts_synthesize(reply, language=reply_language_choice, 
                                                   spd=7, pit=6, per=1)
         else:
             # 中文-默认使用百度云TTS - 女声，标准语速和音调
-            print("音频播放调试: 使用默认百度云TTS - 女声，标准语速和音调")
+            print("Audio playback debug: Using default Baidu Cloud TTS - Female voice, standard speed and pitch")
             audio_file_path = AudioService.tts_synthesize(reply, language=reply_language_choice, 
                                                   spd=5, pit=5, per=0)
     else:
         # 非中文语言使用火山引擎TTS
         if tts_choice == "Soft Female Voice - Cancan (Normal)":
             # 使用火山引擎TTS - 灿灿音色，标准语速和音调
-            print("音频播放调试: 使用火山引擎TTS - 灿灿音色，标准语速和音调")
+            print("Audio playback debug: Using Volcano Engine TTS - Cancan voice, standard speed and pitch")
             audio_file_path = AudioService.tts_synthesize(reply, tts_engine="volcano", language=reply_language_choice, 
                                                   voice_type="BV700_streaming", speed=1.0, pitch=1.0)
         elif tts_choice == "Energetic Female Voice - Cancan (Fast)":
             # 使用火山引擎TTS - 灿灿音色，快速语速和高音调
-            print("音频播放调试: 使用火山引擎TTS - 灿灿音色，快速语速和高音调")
+            print("Audio playback debug: Using Volcano Engine TTS - Cancan voice, fast speed and high pitch")
             audio_file_path = AudioService.tts_synthesize(reply, tts_engine="volcano", language=reply_language_choice, 
                                                   voice_type="BV700_streaming", speed=1.3, pitch=1.2)
         elif tts_choice == "Professional Foreign Voice - Stefan (Normal)":
             # 使用火山引擎TTS - Stefan音色，标准语速和音调
-            print("音频播放调试: 使用火山引擎TTS - Stefan音色，标准语速和音调")
+            print("Audio playback debug: Using Volcano Engine TTS - Stefan voice, standard speed and pitch")
             audio_file_path = AudioService.tts_synthesize(reply, tts_engine="volcano", language=reply_language_choice, 
                                                   voice_type="BV702_streaming", speed=1.0, pitch=1.0)
         elif tts_choice == "Expressive Foreign Voice - Stefan (Fast)":
             # 使用火山引擎TTS - Stefan音色，快速语速和高音调
-            print("音频播放调试: 使用火山引擎TTS - Stefan音色，快速语速和高音调")
+            print("Audio playback debug: Using Volcano Engine TTS - Stefan voice, fast speed and high pitch")
             audio_file_path = AudioService.tts_synthesize(reply, tts_engine="volcano", language=reply_language_choice, 
                                                   voice_type="BV702_streaming", speed=1.3, pitch=1.2)
         else:
             # 默认使用火山引擎TTS - 灿灿音色，标准语速和音调
-            print("音频播放调试: 使用默认火山引擎TTS - 灿灿音色，标准语速和音调")
+            print("Audio playback debug: Using default Volcano Engine TTS - Cancan voice, standard speed and pitch")
             audio_file_path = AudioService.tts_synthesize(reply, tts_engine="volcano", language=reply_language_choice, 
                                                   voice_type="BV700_streaming", speed=1.0, pitch=1.0)
     
@@ -390,41 +390,41 @@ def handle_chat(message, history, lora_path, prompt_choice, promptFormat_choice,
 # 处理文件上传函数
 def handle_upload(file, history, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice, asr_language_choice):
     """
-    处理用户上传的音频文件，将其转换为文本并生成回复
+    Handle user uploaded audio files, convert them to text and generate replies
     
-    参数:
-        file: 用户上传的音频文件对象
-        history: 当前的聊天历史记录
-        lora_path: 选择的模型路径
-        prompt_choice: 选择的提示模板
-        promptFormat_choice: 选择的提示格式
-        tts_choice: 选择的语音合成风格
-        reply_language_choice: 选择的回复语言
-        asr_language_choice: 选择的ASR识别语言
+    Parameters:
+        file: User uploaded audio file object
+        history: Current chat history
+        lora_path: Selected model path
+        prompt_choice: Selected prompt template
+        promptFormat_choice: Selected prompt format
+        tts_choice: Selected TTS style
+        reply_language_choice: Selected reply language
+        asr_language_choice: Selected ASR recognition language
         
-    返回:
-        history_for_display: 更新后的聊天界面历史
-        chat_history + [(message, reply)]: 更新后的聊天历史数据
-        audio_path: 生成的回复音频路径
-        "": 清空输入框
+    Returns:
+        history_for_display: Updated chat interface history
+        chat_history + [(message, reply)]: Updated chat history data
+        audio_path: Generated reply audio path
+        "": Clear input box
     """
-    # 检查文件是否为空
+    # Check if file is empty
     if file is None:
         return history, history
     
-    # 调用语音识别服务将上传的音频文件转换为文本，使用ASR语言选择
+    # Call speech recognition service to convert uploaded audio file to text, using ASR language selection
     message = AudioService.asr_recognize(file.name, language=asr_language_choice)
     
-    # 检查语音识别结果，如果失败则返回错误信息
-    if not message or message == "语音识别失败" or message == "语音识别请求失败" or message == "Unable to get Baidu access token":
+    # Check speech recognition result, return error message if failed
+    if not message or message == "Speech recognition failed" or message == "Speech recognition request failed" or message == "Unable to get Baidu access token":
         return history + [("<audio src='" + file.name + "' controls style='display:none;'></audio>", "Speech recognition failed, please try again")], history
     
-    # 创建历史记录的副本用于显示
+    # Create a copy of history for display
     history_for_display = history.copy()
-    # 添加用户消息到历史记录
+    # Add user message to history
     history_for_display.append((message, None))
     
-    # 根据选择的回复语言添加相应的请求（不显示在前端，但传给模型）
+    # Add corresponding request based on selected reply language (not displayed in frontend, but passed to model)
     if reply_language_choice == "Chinese":
         message_with_language_request = message + " 请用中文回答"
     elif reply_language_choice == "English":
@@ -434,64 +434,64 @@ def handle_upload(file, history, lora_path, prompt_choice, promptFormat_choice, 
     elif reply_language_choice == "French":
         message_with_language_request = message + " Veuillez répondre en français"
     else:
-        # 默认使用英文
+        # Default to English
         message_with_language_request = message + " Please answer in English"
     
-    # 准备聊天历史数据，过滤掉没有回复的消息
+    # Prepare chat history data, filter out messages without replies
     chat_history = [(h[0], h[1]) for h in history if h[1] is not None]
-    # 调用聊天服务发送请求并获取回复
+    # Call chat service to send request and get reply
     response = ChatService.send_chat_request(message_with_language_request, chat_history, lora_path, prompt_choice, promptFormat_choice)
     
-    # 从响应中获取回复文本，如果没有则使用默认错误消息
-    reply = response.get("reply", "抱歉，服务器没有返回有效回复")
+    # Get reply text from response, use default error message if none
+    reply = response.get("reply", "Sorry, the server did not return a valid reply")
     
     # 根据选择的TTS风格进行语音合成
     if tts_choice == "Standard Voice":
-        # 使用标准女声配置
+        # Use standard female voice configuration
         audio_path = AudioService.tts_synthesize(reply, language=reply_language_choice)
     elif tts_choice == "Gentle Female Voice":
-        # 使用温柔女声配置（度丫丫音色，降低语速，提高音调）
+        # Use gentle female voice configuration (DuYaYa voice, lower speed, higher pitch)
         audio_path = AudioService.tts_synthesize(reply, spd=4, pit=6, per=4, language=reply_language_choice)
     elif tts_choice == "Energetic Male Voice":
-        # 使用活力男声配置（度逍遥音色，提高语速和音调）
+        # Use energetic male voice configuration (DuXiaoyao voice, higher speed and pitch)
         audio_path = AudioService.tts_synthesize(reply, spd=6, pit=6, per=3, language=reply_language_choice)
     elif tts_choice == "Volcano Engine TTS":
-        # 使用火山引擎TTS
+        # Use Volcano Engine TTS
         audio_path = AudioService.tts_synthesize(reply, tts_engine="volcano", language=reply_language_choice)
     else:
-        # 默认使用标准配置
+        # Default to standard configuration
         audio_path = AudioService.tts_synthesize(reply, language=reply_language_choice)
     
-    # 更新显示历史，将最后一条用户消息与AI回复配对
+    # Update display history, pair the last user message with AI reply
     history_for_display[-1] = (message, reply)
     
-    # 处理音频文件，转换为numpy格式供Gradio使用
+    # Process audio file, convert to numpy format for Gradio use
     audio_output_value = None
     if audio_path and os.path.exists(audio_path):
         try:
             import soundfile as sf
             import numpy as np
             data, samplerate = sf.read(audio_path)
-            # 确保数据类型为float32，并且在[-1, 1]范围内
+            # Ensure data type is float32 and within [-1, 1] range
             if data.dtype != np.float32:
                 data = data.astype(np.float32)
-            # 如果数据超出范围，进行归一化
+            # If data exceeds range, normalize
             if np.max(np.abs(data)) > 1.0:
                 data = data / np.max(np.abs(data))
-            print(f"音频播放调试: handle_upload成功读取音频文件，采样率 = {samplerate}，形状 = {data.shape}，数据类型 = {data.dtype}")
+            print(f"Audio playback debug: handle_upload successfully read audio file, sample rate = {samplerate}, shape = {data.shape}, data type = {data.dtype}")
             audio_output_value = (int(samplerate), data)
         except Exception as e:
-            print(f"音频播放调试: handle_upload读取音频文件失败 - {e}")
+            print(f"音频播放调试: handle_upload failed to read audio file - {e}")
             try:
                 from pydub import AudioSegment
                 import numpy as np
                 audio = AudioSegment.from_file(audio_path, format="mp3")
-                # 转换为numpy数组
+                # Convert to numpy array
                 samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
-                # 如果是立体声，取一个声道
+                # If stereo, take one channel
                 if audio.channels == 2:
                     samples = samples.reshape((-1, 2))[:, 0]
-                # 归一化到[-1, 1]范围
+                # Normalize to [-1, 1] range
                 if audio.sample_width == 2:  # 16-bit
                     samples = samples / 32768.0
                 elif audio.sample_width == 4:  # 32-bit
@@ -547,7 +547,7 @@ def create_interface():
                     [],  # 初始为空列表
                     elem_id="chatbot",  # HTML元素ID，用于CSS和JavaScript选择
                     height=500,  # 设置高度
-                    avatar_images=("https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f464.png", "https://cdn-icons-png.flaticon.com/512/4712/4712035.png"),  # 用户和机器人头像
+                    avatar_images=("https://cdn.jsdelivir.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f464.png", "https://cdn-icons-png.flaticon.com/512/4712/4712035.png"),  # 用户和机器人头像
                 )
                 
                 # 消息输入区域布局

@@ -39,7 +39,7 @@ DEFAULT_VOICE_VOLUME = 5  # 音量
 DEFAULT_VOICE_PERSON = 0  # 发音人，0女1男3度逍遥4度丫丫
 
 # 界面配置
-APP_TITLE = "XAI-MBTI"
-APP_SUBTITLE = "Intelligent Dialogue System - MBTI Personality-based AI Assistant"
+APP_TITLE = "XAILab-Carsona"
+APP_SUBTITLE = "XAILab-Carsona - MBTI Personality-based AI Assistant"
 APP_THEME = "soft"
 APP_PRIMARY_COLOR = "blue"

@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 
 """
-音频处理服务模块
-提供语音识别(ASR)和语音合成(TTS)功能
-基于百度云API和火山引擎API实现
+Audio processing service module
+Provides speech recognition (ASR) and text-to-speech (TTS) functionality
+Based on Baidu Cloud API and Volcano Engine API implementation
 """
 
 import requests
@@ -21,16 +21,16 @@ from pydub import AudioSegment
 import soundfile as sf
 import numpy as np
 
-# 导入配置
+# Import configuration
 from config import (BAIDU_API_KEY, BAIDU_SECRET_KEY, DEFAULT_VOICE_SPEED, DEFAULT_VOICE_PITCH, 
                    DEFAULT_VOICE_VOLUME, DEFAULT_VOICE_PERSON, VOLCANO_APP_ID, VOLCANO_ACCESS_TOKEN, VOLCANO_SECRET_KEY)
 
 class AudioService:
-    """音频处理服务类"""
+    """Audio processing service class"""
     
     @staticmethod
     def get_baidu_access_token():
-        """获取百度云access_token"""
+        """Get Baidu Cloud access_token"""
         url = "https://aip.baidubce.com/oauth/2.0/token"
         params = {
             "grant_type": "client_credentials",
@@ -41,77 +41,77 @@ class AudioService:
         if response.status_code == 200:
             return response.json().get("access_token")
         else:
-            print(f"获取百度access_token失败: {response.text}")
+            print(f"Failed to get Baidu access_token: {response.text}")
             return None
     
     @staticmethod
     def convert_to_wav(audio_file_path):
-        """转换音频为WAV格式"""
+        """Convert audio to WAV format"""
         try:
-            # 获取文件扩展名
+            # Get file extension
             file_ext = os.path.splitext(audio_file_path)[1].lower()
             
-            # 如果已经是wav格式且采样率正确，直接返回
+            # If already in wav format with correct sample rate, return directly
             if file_ext == ".wav":
                 try:
                     data, samplerate = sf.read(audio_file_path)
                     if samplerate == 16000:
                         return audio_file_path
                 except Exception as e:
-                    print(f"检查WAV文件时出错: {e}")
-                    # 继续尝试转换
+                    print(f"Error checking WAV file: {e}")
+                    # Continue trying to convert
             
-            # 创建临时文件
+            # Create temporary file
             temp_wav_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
             
-            # 使用pydub转换
+            # Convert using pydub
             audio = AudioSegment.from_file(audio_file_path)
             audio = audio.set_frame_rate(16000).set_channels(1)
             audio.export(temp_wav_file, format="wav")
             
             return temp_wav_file
         except Exception as e:
-            print(f"音频转换失败: {e}")
-            # 返回None而不是原文件路径，让调用者知道转换失败
+            print(f"Audio conversion failed: {e}")
+            # Return None instead of original file path, let caller know conversion failed
             return None
     
     @classmethod
     def asr_recognize(cls, audio_file_path, language="English"):
-        """语音识别(ASR)
+        """Speech recognition (ASR)
         
         Args:
-            audio_file_path: 音频文件路径
-            language: 语言选择，支持 "Chinese", "English"
+            audio_file_path: Audio file path
+            language: Language selection, supports "Chinese", "English"
         """
         token = cls.get_baidu_access_token()
         if not token:
             return "Unable to get Baidu access token"
         
-        # 转换为wav格式并设置正确的采样率
+        # Convert to wav format and set correct sample rate
         temp_wav_file = cls.convert_to_wav(audio_file_path)
         if temp_wav_file is None:
-            return "音频格式转换失败"
+            return "Audio format conversion failed"
             
         try:
             with open(temp_wav_file, "rb") as f:
                 audio_data = f.read()
         except Exception as e:
-            print(f"读取音频文件失败: {e}")
-            return "读取音频文件失败"
+            print(f"Failed to read audio file: {e}")
+            return "Failed to read audio file"
         
-        # 如果是临时创建的文件，使用后删除
+        # If it's a temporarily created file, delete after use
         if temp_wav_file != audio_file_path:
             try:
                 os.unlink(temp_wav_file)
             except Exception as e:
-                print(f"删除临时文件失败: {e}")
+                print(f"Failed to delete temporary file: {e}")
         
-        # 根据语言选择设置不同的语音识别模型
-        dev_pid = 1737  # 默认英语模型
+        # Set different speech recognition models based on language selection
+        dev_pid = 1737  # Default English model
         if language == "Chinese":
-            dev_pid = 1537  # 普通话模型
+            dev_pid = 1537  # Mandarin model
         elif language == "English":
-            dev_pid = 1737  # 英语模型
+            dev_pid = 1737  # English model
         
         url = "https://vop.baidu.com/server_api"
         headers = {
@@ -135,79 +135,79 @@ class AudioService:
                 if result.get("err_no") == 0 and result.get("result"):
                     return result["result"][0]
                 else:
-                    print(f"语音识别失败: {result}")
-                    return "语音识别失败"
+                    print(f"Speech recognition failed: {result}")
+                    return "Speech recognition failed"
             else:
-                print(f"语音识别请求失败: {response.text}")
-                return "语音识别请求失败"
+                print(f"Speech recognition request failed: {response.text}")
+                return "Speech recognition request failed"
         except requests.exceptions.Timeout:
-            print("语音识别请求超时")
-            return "语音识别请求超时"
+            print("Speech recognition request timeout")
+            return "Speech recognition request timeout"
         except requests.exceptions.RequestException as e:
-            print(f"语音识别网络请求异常: {e}")
-            return "语音识别网络请求失败"
+            print(f"Speech recognition network request exception: {e}")
+            return "Speech recognition network request failed"
     
     @classmethod
     def asr_recognize_from_numpy(cls, audio_data, sample_rate, language="English"):
-        """从NumPy数组进行语音识别
+        """Speech recognition from NumPy array
         
         Args:
-            audio_data: 音频数据NumPy数组
-            sample_rate: 采样率
-            language: 语言选择，支持 "Chinese", "English", "Japanese", "French"
+            audio_data: Audio data NumPy array
+            sample_rate: Sample rate
+            language: Language selection, supports "Chinese", "English", "Japanese", "French"
         """
-        # 保存到临时文件
+        # Save to temporary file
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
         try:
             sf.write(temp_file.name, audio_data, sample_rate)
             temp_file.close()
             
-            # 进行语音识别
+            # Perform speech recognition
             result = cls.asr_recognize(temp_file.name, language=language)
             
             return result
         except Exception as e:
-            print(f"处理NumPy音频数据时出错: {e}")
-            return "音频数据处理失败"
+            print(f"Error processing NumPy audio data: {e}")
+            return "Audio data processing failed"
         finally:
-            # 确保临时文件被删除
+            # Ensure temporary file is deleted
             try:
                 os.unlink(temp_file.name)
             except Exception as e:
-                 print(f"删除临时文件失败: {e}")
+                 print(f"Failed to delete temporary file: {e}")
     
     @classmethod
     def tts_synthesize(cls, text, spd=DEFAULT_VOICE_SPEED, pit=DEFAULT_VOICE_PITCH, vol=DEFAULT_VOICE_VOLUME, per=DEFAULT_VOICE_PERSON, tts_engine="baidu", language="English", voice_type=None, speed=1.0, pitch=1.0):
-        """语音合成(TTS)
+        """Text-to-speech synthesis (TTS)
         
         Args:
-            text: 要合成的文本
-            spd: 语速 (百度云参数)
-            pit: 音调 (百度云参数)
-            vol: 音量 (百度云参数)
-            per: 发音人 (百度云参数)
-            tts_engine: TTS引擎，支持 "baidu" 和 "volcano"
-            language: 语言选择，支持 "Chinese", "English", "Japanese"
-            voice_type: 火山引擎音色类型，如 "BV700_streaming"(灿灿), "BV701_streaming"(擎苍), "BV702_streaming"(Stefan)
-            speed: 语速 (火山引擎参数，范围：0.5~2.0)
-            pitch: 音调 (火山引擎参数，范围：0.5~2.0)
+            text: Text to synthesize
+            spd: Speech speed (Baidu Cloud parameter)
+            pit: Pitch (Baidu Cloud parameter)
+            vol: Volume (Baidu Cloud parameter)
+            per: Speaker (Baidu Cloud parameter)
+            tts_engine: TTS engine, supports "baidu" and "volcano"
+            language: Language selection, supports "Chinese", "English", "Japanese"
+            voice_type: Volcano Engine voice type, such as "BV700_streaming"(Cancan), "BV701_streaming"(Qingcang), "BV702_streaming"(Stefan)
+            speed: Speech speed (Volcano Engine parameter, range: 0.5~2.0)
+            pitch: Pitch (Volcano Engine parameter, range: 0.5~2.0)
         """
         if tts_engine == "volcano":
             return cls.volcano_tts_synthesize(text, language=language, voice_type=voice_type, speed=speed, pitch=pitch)
         
-        # 默认使用百度云TTS
+        # Default to Baidu Cloud TTS
         token = cls.get_baidu_access_token()
         if not token:
             return None
         
-        # 根据语言选择设置不同的语言代码
-        lan = "en"  # 默认英语
+        # Set different language codes based on language selection
+        lan = "en"  # Default English
         if language == "Chinese":
             lan = "zh"
         elif language == "English":
             lan = "en"
-        # 百度API不支持日语和法语，使用英语作为后备
-        # 注意：百度API不支持jp作为语言代码
+        # Baidu API doesn't support Japanese and French, use English as fallback
+        # Note: Baidu API doesn't support jp as language code
         elif language == "Japanese" or language == "French":
             lan = "en"
         
@@ -218,33 +218,33 @@ class AudioService:
             "cuid": "123456PYTHON",
             "ctp": 1,
             "lan": lan,
-            "spd": spd,  # 语速
-            "pit": pit,  # 音调
-            "vol": vol,  # 音量
-            "per": per   # 发音人，0女1男3度逍遥4度丫丫
+            "spd": spd,  # Speech speed
+            "pit": pit,  # Pitch
+            "vol": vol,  # Volume
+            "per": per   # Speaker, 0=female 1=male 3=DuXiaoyao 4=DuYaya
         }
         
         response = requests.post(url, params=params)
         if response.headers.get("Content-Type", "").startswith("audio/"):
-            # 创建临时文件保存音频
+            # Create temporary file to save audio
             temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
             temp_file.write(response.content)
             temp_file.close()
             return temp_file.name
         else:
-            print(f"语音合成失败: {response.text}")
+            print(f"Speech synthesis failed: {response.text}")
             return None
             
     @classmethod
     def volcano_tts_synthesize(cls, text, language="English", voice_type=None, speed=1.0, pitch=1.0):
-        """使用火山引擎进行语音合成
+        """Use Volcano Engine for text-to-speech synthesis
         
         Args:
-            text: 要合成的文本
-            language: 语言选择，支持 "Chinese", "English", "Japanese"（不支持"French"）
-            voice_type: 音色类型，如果为None则根据语言自动选择
-            speed: 语速，范围：0.5~2.0
-            pitch: 音调，范围：0.5~2.0
+            text: Text to synthesize
+            language: Language selection, supports "Chinese", "English", "Japanese" (does not support "French")
+            voice_type: Voice type, if None, automatically select based on language
+            speed: Speech speed, range: 0.5~2.0
+            pitch: Pitch, range: 0.5~2.0
         """
         import json
         import time
@@ -252,144 +252,144 @@ class AudioService:
         import hmac
         import hashlib
         
-        # 火山引擎TTS API地址 - 在URL中包含token
+        # Volcano Engine TTS API address - include token in URL
         url = f"https://openspeech.bytedance.com/api/v1/tts?token={VOLCANO_ACCESS_TOKEN}"
         
-        # 生成唯一请求ID
+        # Generate unique request ID
         req_id = str(uuid.uuid4())
         
-        # 根据语言选择设置不同的语言代码
-        lang_code = "en"  # 默认英语
+        # Set different language codes based on language selection
+        lang_code = "en"  # Default English
         if language == "Chinese":
-            lang_code = "zh"  # 火山引擎使用zh而不是cn
+            lang_code = "zh"  # Volcano Engine uses zh instead of cn
         elif language == "English":
             lang_code = "en"
         elif language == "Japanese":
-            lang_code = "ja"  # 火山引擎使用ja而不是jp
+            lang_code = "ja"  # Volcano Engine uses ja instead of jp
         else:
-            # 不支持其他语言，使用英语作为后备
+            # Other languages not supported, use English as fallback
             lang_code = "en"
             
-        # 根据语言选择合适的音色
+        # Select appropriate voice based on language
         if voice_type is None:
             if language == "Chinese":
-                voice_type = "BV700_streaming"  # 灿灿
+                voice_type = "BV700_streaming"  # Cancan
             elif language == "English":
                 voice_type = "BV702_streaming"  # Stefan
             elif language == "Japanese":
-                voice_type = "BV700_streaming"  # 灿灿（支持日语）
+                voice_type = "BV700_streaming"  # Cancan (supports Japanese)
             else:
-                voice_type = "BV700_streaming"  # 默认使用灿灿
+                voice_type = "BV700_streaming"  # Default to Cancan
         
-        # 确保文本不为空且进行格式处理
+        # Ensure text is not empty and format processing
         if not text or text.strip() == "":
-            print("火山引擎语音合成错误: 文本内容为空")
+            print("Volcano Engine TTS error: Text content is empty")
             return None
         
-        # 处理文本，确保符合火山引擎要求
+        # Process text to ensure it meets Volcano Engine requirements
         processed_text = text.strip()
         
-        # 移除可能导致问题的特殊字符
+        # Remove special characters that might cause issues
         import re
-        # 简化文本处理，移除控制字符和特殊字符
-        processed_text = re.sub(r'[\x00-\x1F\x7F-\x9F]', '', processed_text)  # 移除控制字符和不可见字符
+        # Simplify text processing, remove control characters and special characters
+        processed_text = re.sub(r'[\x00-\x1F\x7F-\x9F]', '', processed_text)  # Remove control characters and invisible characters
             
-        # 准备请求体 - 根据火山引擎最新API文档格式
+        # Prepare request body - according to Volcano Engine latest API documentation format
         request_data = {
             "app": {
-                "appid": VOLCANO_APP_ID,  # 使用配置文件中的appid
-                "token": "",  # 使用签名认证，token为空
-                "cluster": "volcano_tts"  # 根据文档使用正确的cluster值
+                "appid": VOLCANO_APP_ID,  # Use appid from config file
+                "token": "",  # Use signature authentication, token is empty
+                "cluster": "volcano_tts"  # Use correct cluster value according to documentation
             },
             "user": {
-                "uid": "user_" + str(int(time.time()))  # 动态生成用户ID
+                "uid": "user_" + str(int(time.time()))  # Dynamically generate user ID
             },
             "audio": {
-                "voice_type": voice_type,  # 使用传入的音色参数
+                "voice_type": voice_type,  # Use passed voice parameter
                 "encoding": "mp3",
                 "rate": 24000,
-                "speed_ratio": speed,  # 使用传入的语速参数，范围：0.2~3.0
-                "volume_ratio": 1.0,  # 音量，范围：0.1~3.0
-                "pitch_ratio": pitch,   # 使用传入的音调参数，范围：0.1~3.0
-                "language": lang_code  # 使用根据language参数设置的语言代码
+                "speed_ratio": speed,  # Use passed speed parameter, range: 0.2~3.0
+                "volume_ratio": 1.0,  # Volume, range: 0.1~3.0
+                "pitch_ratio": pitch,   # Use passed pitch parameter, range: 0.1~3.0
+                "language": lang_code  # Use language code set based on language parameter
             },
             "request": {
                 "reqid": req_id,
-                "text": processed_text,  # 使用处理后的文本
+                "text": processed_text,  # Use processed text
                 "text_type": "plain",
                 "operation": "query",
                 "silence_duration": 125
             }
         }
         
-        # 针对中文特殊处理，使用百度云TTS而非火山引擎
+        # Special handling for Chinese, use Baidu Cloud TTS instead of Volcano Engine
         if lang_code == "zh":
-            # 使用百度云TTS合成中文
+            # Use Baidu Cloud TTS for Chinese synthesis
             return AudioService.tts_synthesize(text, spd=int(speed*5), pit=int(pitch*5), vol=15, per=0, tts_engine="baidu", language="Chinese")
         
-        # 设置请求头 - 使用正确的Bearer Token格式（注意是分号而不是空格）
+        # Set request headers - use correct Bearer Token format (note semicolon instead of space)
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer;{VOLCANO_ACCESS_TOKEN}"
         }
         
-        # 在函数开始时生成时间戳，确保整个处理过程中使用相同的时间戳
+        # Generate timestamp at function start to ensure same timestamp is used throughout processing
         timestamp = int(time.time())
-        # 使用项目的静态目录保存音频文件
+        # Use project's static directory to save audio files
         static_dir = os.path.join("/data/LLM-SFT/CCYTest/XAI_MBTI/static")
         os.makedirs(static_dir, exist_ok=True)
         audio_file_path = os.path.join(static_dir, f"tts_output_{timestamp}.mp3")
-        print(f"保存音频数据到: {audio_file_path}")
+        print(f"Saving audio data to: {audio_file_path}")
         
-        # 打印请求信息以便调试
-        print(f"火山引擎TTS请求: 语言={lang_code}, 文本长度={len(processed_text)}")
-        # print(f"请求数据: {json.dumps(request_data, ensure_ascii=False)}")
-        # print(f"请求头: {headers}")
+        # Print request information for debugging
+        print(f"Volcano Engine TTS request: language={lang_code}, text length={len(processed_text)}")
+        # print(f"Request data: {json.dumps(request_data, ensure_ascii=False)}")
+        # print(f"Request headers: {headers}")
         
         try:
             response = requests.post(url, headers=headers, json=request_data)
-            print(f"火山引擎响应状态码: {response.status_code}")
-            # 不打印响应头信息，避免长段数据
+            print(f"Volcano Engine response status code: {response.status_code}")
+            # Don't print response headers to avoid long data segments
             
             if response.status_code == 200:
-                # 检查响应内容类型
+                # Check response content type
                 content_type = response.headers.get("Content-Type", "")
-                print(f"响应内容类型: {content_type}")
+                print(f"Response content type: {content_type}")
                 
-                # 首先尝试解析为JSON
+                # First try to parse as JSON
                 try:
                     result = response.json()
-                    # 不打印完整的响应JSON，避免长段数据
-                    print(f"火山引擎响应JSON状态码: {result.get('code')}")
+                    # Don't print complete response JSON to avoid long data segments
+                    print(f"Volcano Engine response JSON status code: {result.get('code')}")
                     
-                    # 使用预先生成的时间戳和文件路径
+                    # Use pre-generated timestamp and file path
                     
-                    # 检查是否成功
-                    if result.get("code") == 0 or result.get("code") == 3000:  # 火山引擎成功状态码
-                        # 从data字段获取base64编码的音频数据
+                    # Check if successful
+                    if result.get("code") == 0 or result.get("code") == 3000:  # Volcano Engine success status codes
+                        # Get base64 encoded audio data from data field
                         audio_base64 = result.get("data", "")
                         if audio_base64:
-                            # 解码base64数据
+                            # Decode base64 data
                             audio_data = base64.b64decode(audio_base64)
                             
-                            # 直接保存为音频文件，不做额外处理
+                            # Save directly as audio file without additional processing
                             try:
-                                print(f"保存音频数据到: {audio_file_path}")
+                                print(f"Saving audio data to: {audio_file_path}")
                                 with open(audio_file_path, "wb") as f:
                                     f.write(audio_data)
                                 if os.path.exists(audio_file_path):
                                     return audio_file_path
                                 else:
-                                    print(f"错误: 文件保存失败: {audio_file_path}")
+                                    print(f"Error: File save failed: {audio_file_path}")
                             except Exception as save_error:
-                                print(f"保存音频文件时发生错误: {save_error}")
+                                print(f"Error occurred while saving audio file: {save_error}")
                         else:
-                            # 尝试从payload字段获取音频数据
+                            # Try to get audio data from payload field
                             payload = result.get("payload", {})
                             if isinstance(payload, dict) and "audio_data" in payload:
                                 audio_base64 = payload.get("audio_data", "")
                                 if audio_base64:
-                                    # 解码base64数据并直接保存
+                                    # Decode base64 data and save directly
                                     audio_data = base64.b64decode(audio_base64)
                                     try:
                                         with open(audio_file_path, "wb") as f:
@@ -397,38 +397,38 @@ class AudioService:
                                         if os.path.exists(audio_file_path):
                                             return audio_file_path
                                         else:
-                                            print(f"错误: payload文件保存失败: {audio_file_path}")
+                                            print(f"Error: payload file save failed: {audio_file_path}")
                                     except Exception as save_error:
-                                        print(f"保存payload音频文件时发生错误: {save_error}")
-                            print("火山引擎响应中没有找到音频数据")
+                                        print(f"Error occurred while saving payload audio file: {save_error}")
+                            print("No audio data found in Volcano Engine response")
                     else:
-                        print(f"火山引擎语音合成失败: {result.get('message', '未知错误')}")
+                        print(f"Volcano Engine TTS failed: {result.get('message', 'Unknown error')}")
                 except ValueError as e:
-                    print(f"解析JSON响应失败: {e}")
-                    # 如果不是JSON格式，可能是直接返回的音频数据
+                    print(f"Failed to parse JSON response: {e}")
+                    # If not JSON format, might be direct audio data return
                     if content_type.startswith("audio/"):
-                        # 保存为音频文件 - 使用预先生成的文件路径
+                        # Save as audio file - use pre-generated file path
                         with open(audio_file_path, "wb") as f:
                             f.write(response.content)
-                        print(f"已保存直接音频内容到静态文件: {audio_file_path}")
+                        print(f"Saved direct audio content to static file: {audio_file_path}")
                         return audio_file_path
             else:
-                print(f"火山引擎语音合成请求失败: {response.text}")
+                print(f"Volcano Engine TTS request failed: {response.text}")
         except Exception as e:
-            print(f"火山引擎语音合成异常: {e}")
+            print(f"Volcano Engine TTS exception: {e}")
             
         return None
 
-# 测试代码
+# Test code
 if __name__ == "__main__":
-    # 测试TTS
-    audio_file = AudioService.tts_synthesize("这是一个测试，测试百度语音合成接口。")
+    # Test TTS
+    audio_file = AudioService.tts_synthesize("This is a test for Baidu speech synthesis interface.")
     if audio_file:
-        print(f"语音合成成功，文件保存在: {audio_file}")
+        print(f"Speech synthesis successful, file saved at: {audio_file}")
     else:
-        print("语音合成失败")
+        print("Speech synthesis failed")
     
-    # 如果有音频文件，可以测试ASR
+    # If audio file exists, test ASR
     if audio_file:
         text = AudioService.asr_recognize(audio_file)
-        print(f"语音识别结果: {text}")
+        print(f"Speech recognition result: {text}")
