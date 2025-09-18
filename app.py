@@ -262,41 +262,60 @@ def handle_chat(message, history, lora_path, prompt_choice, promptFormat_choice,
     print(f"音频播放调试: 开始语音合成，TTS选择 = {tts_choice}, 回复语言 = {reply_language_choice}")
     print(f"音频播放调试: 回复文本长度 = {len(reply)}")
     
-    if tts_choice == "Soft Female Voice - Cancan (Normal)":
-        # 使用火山引擎TTS - 灿灿音色，标准语速和音调
-        print("音频播放调试: 使用火山引擎TTS - 灿灿音色，标准语速和音调")
-        audio_file_path = AudioService.tts_synthesize(reply, tts_engine="volcano", language=reply_language_choice, 
-                                              voice_type="BV700_streaming", speed=1.0, pitch=1.0)
-    elif tts_choice == "Energetic Female Voice - Cancan (Fast)":
-        # 使用火山引擎TTS - 灿灿音色，快速语速和高音调
-        print("音频播放调试: 使用火山引擎TTS - 灿灿音色，快速语速和高音调")
-        audio_file_path = AudioService.tts_synthesize(reply, tts_engine="volcano", language=reply_language_choice, 
-                                              voice_type="BV700_streaming", speed=1.3, pitch=1.2)
-    elif tts_choice == "Calm Male Voice - Qingcang (Normal)":
-        # 使用火山引擎TTS - 擎苍音色，标准语速和音调
-        print("音频播放调试: 使用火山引擎TTS - 擎苍音色，标准语速和音调")
-        audio_file_path = AudioService.tts_synthesize(reply, tts_engine="volcano", language=reply_language_choice, 
-                                              voice_type="BV701_streaming", speed=1.0, pitch=1.0)
-    elif tts_choice == "Enthusiastic Male Voice - Qingcang (Fast)":
-        # 使用火山引擎TTS - 擎苍音色，快速语速和高音调
-        print("音频播放调试: 使用火山引擎TTS - 擎苍音色，快速语速和高音调")
-        audio_file_path = AudioService.tts_synthesize(reply, tts_engine="volcano", language=reply_language_choice, 
-                                              voice_type="BV701_streaming", speed=1.3, pitch=1.2)
-    elif tts_choice == "Professional Foreign Voice - Stefan (Normal)":
-        # 使用火山引擎TTS - Stefan音色，标准语速和音调
-        print("音频播放调试: 使用火山引擎TTS - Stefan音色，标准语速和音调")
-        audio_file_path = AudioService.tts_synthesize(reply, tts_engine="volcano", language=reply_language_choice, 
-                                              voice_type="BV702_streaming", speed=1.0, pitch=1.0)
-    elif tts_choice == "Expressive Foreign Voice - Stefan (Fast)":
-        # 使用火山引擎TTS - Stefan音色，快速语速和高音调
-        print("音频播放调试: 使用火山引擎TTS - Stefan音色，快速语速和高音调")
-        audio_file_path = AudioService.tts_synthesize(reply, tts_engine="volcano", language=reply_language_choice, 
-                                              voice_type="BV702_streaming", speed=1.3, pitch=1.2)
+    # 中文语言使用百度云TTS，其他语言使用火山引擎TTS
+    if reply_language_choice == "Chinese":
+        if tts_choice == "Soft Female Voice - Cancan (Normal)":
+            # 中文-使用百度云TTS - 女声，标准语速和音调
+            print("音频播放调试: 使用百度云TTS - 女声，标准语速和音调")
+            audio_file_path = AudioService.tts_synthesize(reply, language=reply_language_choice, 
+                                                  spd=5, pit=5, per=0)
+        elif tts_choice == "Energetic Female Voice - Cancan (Fast)":
+            # 中文-使用百度云TTS - 女声，快速语速和高音调
+            print("音频播放调试: 使用百度云TTS - 女声，快速语速和高音调")
+            audio_file_path = AudioService.tts_synthesize(reply, language=reply_language_choice, 
+                                                  spd=7, pit=6, per=0)
+        elif tts_choice == "Professional Foreign Voice - Stefan (Normal)":
+            # 中文-使用百度云TTS - 男声，标准语速和音调
+            print("音频播放调试: 使用百度云TTS - 男声，标准语速和音调")
+            audio_file_path = AudioService.tts_synthesize(reply, language=reply_language_choice, 
+                                                  spd=5, pit=5, per=1)
+        elif tts_choice == "Expressive Foreign Voice - Stefan (Fast)":
+            # 中文-使用百度云TTS - 男声，快速语速和高音调
+            print("音频播放调试: 使用百度云TTS - 男声，快速语速和高音调")
+            audio_file_path = AudioService.tts_synthesize(reply, language=reply_language_choice, 
+                                                  spd=7, pit=6, per=1)
+        else:
+            # 中文-默认使用百度云TTS - 女声，标准语速和音调
+            print("音频播放调试: 使用默认百度云TTS - 女声，标准语速和音调")
+            audio_file_path = AudioService.tts_synthesize(reply, language=reply_language_choice, 
+                                                  spd=5, pit=5, per=0)
     else:
-        # 默认使用火山引擎TTS - 灿灿音色，标准语速和音调
-        print("音频播放调试: 使用默认火山引擎TTS - 灿灿音色，标准语速和音调")
-        audio_file_path = AudioService.tts_synthesize(reply, tts_engine="volcano", language=reply_language_choice, 
-                                              voice_type="BV700_streaming", speed=1.0, pitch=1.0)
+        # 非中文语言使用火山引擎TTS
+        if tts_choice == "Soft Female Voice - Cancan (Normal)":
+            # 使用火山引擎TTS - 灿灿音色，标准语速和音调
+            print("音频播放调试: 使用火山引擎TTS - 灿灿音色，标准语速和音调")
+            audio_file_path = AudioService.tts_synthesize(reply, tts_engine="volcano", language=reply_language_choice, 
+                                                  voice_type="BV700_streaming", speed=1.0, pitch=1.0)
+        elif tts_choice == "Energetic Female Voice - Cancan (Fast)":
+            # 使用火山引擎TTS - 灿灿音色，快速语速和高音调
+            print("音频播放调试: 使用火山引擎TTS - 灿灿音色，快速语速和高音调")
+            audio_file_path = AudioService.tts_synthesize(reply, tts_engine="volcano", language=reply_language_choice, 
+                                                  voice_type="BV700_streaming", speed=1.3, pitch=1.2)
+        elif tts_choice == "Professional Foreign Voice - Stefan (Normal)":
+            # 使用火山引擎TTS - Stefan音色，标准语速和音调
+            print("音频播放调试: 使用火山引擎TTS - Stefan音色，标准语速和音调")
+            audio_file_path = AudioService.tts_synthesize(reply, tts_engine="volcano", language=reply_language_choice, 
+                                                  voice_type="BV702_streaming", speed=1.0, pitch=1.0)
+        elif tts_choice == "Expressive Foreign Voice - Stefan (Fast)":
+            # 使用火山引擎TTS - Stefan音色，快速语速和高音调
+            print("音频播放调试: 使用火山引擎TTS - Stefan音色，快速语速和高音调")
+            audio_file_path = AudioService.tts_synthesize(reply, tts_engine="volcano", language=reply_language_choice, 
+                                                  voice_type="BV702_streaming", speed=1.3, pitch=1.2)
+        else:
+            # 默认使用火山引擎TTS - 灿灿音色，标准语速和音调
+            print("音频播放调试: 使用默认火山引擎TTS - 灿灿音色，标准语速和音调")
+            audio_file_path = AudioService.tts_synthesize(reply, tts_engine="volcano", language=reply_language_choice, 
+                                                  voice_type="BV700_streaming", speed=1.0, pitch=1.0)
     
     # 将文件路径赋值给audio_path变量，保持与后续代码兼容
     audio_path = audio_file_path
@@ -734,8 +753,6 @@ def create_interface():
                     [
                         "Soft Female Voice - Cancan (Normal)",  # 灿灿音色-标准语速
                         "Energetic Female Voice - Cancan (Fast)",  # 灿灿音色-快速语调高
-                        "Calm Male Voice - Qingcang (Normal)",  # 擎苍音色-标准语速
-                        "Enthusiastic Male Voice - Qingcang (Fast)",  # 擎苍音色-快速语调高
                         "Professional Foreign Voice - Stefan (Normal)",  # Stefan音色-标准语速
                         "Expressive Foreign Voice - Stefan (Fast)"  # Stefan音色-快速语调高
                     ],

@@ -16,6 +16,7 @@ import hashlib
 import time
 import json
 import uuid
+import re
 from pydub import AudioSegment
 import soundfile as sf
 import numpy as np
@@ -305,25 +306,10 @@ class AudioService:
             }
         }
         
-        # 针对中文特殊处理，确保文本符合火山引擎要求
+        # 针对中文特殊处理，使用百度云TTS而非火山引擎
         if lang_code == "zh":
-            # 确保中文文本不为空且长度合适
-            if len(processed_text.strip()) == 0:
-                processed_text = "您好"
-                request_data["request"]["text"] = processed_text
-            # 限制文本长度，避免过长导致错误
-            elif len(processed_text) > 500:
-                processed_text = processed_text[:500]
-                request_data["request"]["text"] = processed_text
-            
-            # 修复中文文本格式问题
-            # 移除特殊字符和非法字符
-            import re
-            processed_text = re.sub(r'[^\u4e00-\u9fa5a-zA-Z0-9，。！？、：；""''（）【】《》\s]', '', processed_text)
-            # 确保文本不为空
-            if len(processed_text.strip()) == 0:
-                processed_text = "您好"
-            request_data["request"]["text"] = processed_text
+            # 使用百度云TTS合成中文
+            return AudioService.tts_synthesize(text, spd=int(speed*5), pit=int(pitch*5), vol=15, per=0, tts_engine="baidu", language="Chinese")
         
         # 设置请求头 - 使用正确的Bearer Token格式（注意是分号而不是空格）
         headers = {
