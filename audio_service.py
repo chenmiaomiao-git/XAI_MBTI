@@ -57,8 +57,9 @@ class AudioService:
                     data, samplerate = sf.read(audio_file_path)
                     if samplerate == 16000:
                         return audio_file_path
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"检查WAV文件时出错: {e}")
+                    # 继续尝试转换
             
             # 创建临时文件
             temp_wav_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
@@ -71,7 +72,8 @@ class AudioService:
             return temp_wav_file
         except Exception as e:
             print(f"音频转换失败: {e}")
-            return audio_file_path
+            # 返回None而不是原文件路径，让调用者知道转换失败
+            return None
     
     @classmethod
     def asr_recognize(cls, audio_file_path, language="English"):
@@ -87,15 +89,22 @@ class AudioService:
         
         # 转换为wav格式并设置正确的采样率
         temp_wav_file = cls.convert_to_wav(audio_file_path)
-        with open(temp_wav_file, "rb") as f:
-            audio_data = f.read()
+        if temp_wav_file is None:
+            return "音频格式转换失败"
+            
+        try:
+            with open(temp_wav_file, "rb") as f:
+                audio_data = f.read()
+        except Exception as e:
+            print(f"读取音频文件失败: {e}")
+            return "读取音频文件失败"
         
         # 如果是临时创建的文件，使用后删除
         if temp_wav_file != audio_file_path:
             try:
                 os.unlink(temp_wav_file)
-            except:
-                pass
+            except Exception as e:
+                print(f"删除临时文件失败: {e}")
         
         # 根据语言选择设置不同的语音识别模型
         dev_pid = 1737  # 默认英语模型
@@ -123,17 +132,24 @@ class AudioService:
             "dev_pid": dev_pid
         }
         
-        response = requests.post(url, headers=headers, json=data)
-        if response.status_code == 200:
-            result = response.json()
-            if result.get("err_no") == 0 and result.get("result"):
-                return result["result"][0]
+        try:
+            response = requests.post(url, headers=headers, json=data, timeout=30)
+            if response.status_code == 200:
+                result = response.json()
+                if result.get("err_no") == 0 and result.get("result"):
+                    return result["result"][0]
+                else:
+                    print(f"语音识别失败: {result}")
+                    return "语音识别失败"
             else:
-                print(f"语音识别失败: {result}")
-                return "语音识别失败"
-        else:
-            print(f"语音识别请求失败: {response.text}")
-            return "语音识别请求失败"
+                print(f"语音识别请求失败: {response.text}")
+                return "语音识别请求失败"
+        except requests.exceptions.Timeout:
+            print("语音识别请求超时")
+            return "语音识别请求超时"
+        except requests.exceptions.RequestException as e:
+            print(f"语音识别网络请求异常: {e}")
+            return "语音识别网络请求失败"
     
     @classmethod
     def asr_recognize_from_numpy(cls, audio_data, sample_rate, language="English"):
@@ -146,19 +162,23 @@ class AudioService:
         """
         # 保存到临时文件
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
-        sf.write(temp_file.name, audio_data, sample_rate)
-        temp_file.close()
-        
-        # 进行语音识别
-        result = cls.asr_recognize(temp_file.name, language=language)
-        
-        # 删除临时文件
         try:
-            os.unlink(temp_file.name)
-        except:
-            pass
-        
-        return result
+            sf.write(temp_file.name, audio_data, sample_rate)
+            temp_file.close()
+            
+            # 进行语音识别
+            result = cls.asr_recognize(temp_file.name, language=language)
+            
+            return result
+        except Exception as e:
+            print(f"处理NumPy音频数据时出错: {e}")
+            return "音频数据处理失败"
+        finally:
+            # 确保临时文件被删除
+            try:
+                os.unlink(temp_file.name)
+            except Exception as e:
+                 print(f"删除临时文件失败: {e}")
     
     @classmethod
     def tts_synthesize(cls, text, spd=DEFAULT_VOICE_SPEED, pit=DEFAULT_VOICE_PITCH, vol=DEFAULT_VOICE_VOLUME, per=DEFAULT_VOICE_PERSON, tts_engine="baidu", language="English", voice_type=None, speed=1.0, pitch=1.0):

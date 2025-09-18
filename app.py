@@ -144,6 +144,7 @@ def handle_audio(audio, history, lora_path, prompt_choice, promptFormat_choice, 
         "": 清空输入框
     """
     # 如果是音频输入，先根据选择的语言进行语音识别
+    asr_result = None
     if isinstance(audio, tuple):
         # 如果是录音数据，使用语音识别服务将其转换为文本
         audio_data, sample_rate = audio
@@ -151,8 +152,8 @@ def handle_audio(audio, history, lora_path, prompt_choice, promptFormat_choice, 
         asr_result = AudioService.asr_recognize_from_numpy(audio_data, sample_rate, language=reply_language_choice)
         audio = None  # 清空音频输入，因为已经转换为文本
     
-    # 调用handle_chat函数处理音频输入，传入None作为文本消息参数
-    chatbot_output, chat_history_output, audio_output, _ = handle_chat(asr_result if 'asr_result' in locals() else None, history, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice, audio)
+    # 调用handle_chat函数处理音频输入，传入识别结果作为文本消息参数
+    chatbot_output, chat_history_output, audio_output, _ = handle_chat(asr_result, history, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice, audio)
     return chatbot_output, chat_history_output, audio_output, ""
 
 # 处理聊天提交函数 - 应用程序的核心功能
@@ -175,12 +176,21 @@ def handle_chat(message, history, lora_path, prompt_choice, promptFormat_choice,
         audio_path: 生成的回复音频路径
         "": 清空输入框
     """
-    # 如果提供了音频，先进行语音识别处理
-    if audio is not None:
+    audio_path = None  # 初始化音频路径变量
+    
+    # 如果已经有识别结果（从handle_audio传入），直接使用
+    if message is not None:
+        # 使用已经识别的文本，不需要重新处理音频
+        pass
+    # 如果提供了音频但没有识别结果，进行语音识别处理
+    elif audio is not None:
         try:
             # 检查音频格式并进行相应处理
             if isinstance(audio, str):
-                # 如果音频是字符串路径，直接使用该路径
+                # 如果音频是字符串路径，验证它是文件而不是目录
+                if not os.path.isfile(audio):
+                    print(f"无效的音频文件路径: {audio}")
+                    return history + [("<audio controls style='display:none;'></audio>", "无效的音频文件")], history, None, ""
                 audio_file_path = audio
                 # 创建临时文件用于后续处理
                 temp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
@@ -210,17 +220,34 @@ def handle_chat(message, history, lora_path, prompt_choice, promptFormat_choice,
             import shutil
             shutil.copy(temp_audio.name, audio_path)
             
-            # 调用语音识别服务将音频转换为文本
-            message = AudioService.asr_recognize(temp_audio.name)
+            # 调用语音识别服务将音频转换为文本，传递语言参数
+            message = AudioService.asr_recognize(temp_audio.name, language=reply_language_choice)
             os.unlink(temp_audio.name)  # 删除临时文件，释放空间
             
             # 检查语音识别结果，如果失败则返回错误信息
-            if not message or message == "语音识别失败" or message == "语音识别请求失败":
-                return history + [(f"<audio src='/{audio_path}' controls style='display:none;'></audio>", "语音识别失败，请重试")], history, None, ""
+            # 检查所有可能的错误返回值
+            error_messages = [
+                "语音识别失败", 
+                "语音识别请求失败", 
+                "语音识别请求超时",
+                "语音识别网络请求失败",
+                "音频格式转换失败",
+                "读取音频文件失败",
+                "音频数据处理失败",
+                "Unable to get Baidu access token"
+            ]
+            
+            if not message or message in error_messages:
+                # 确保audio_path已定义，如果未定义则使用空字符串
+                audio_display = f"<audio src='/{audio_path}' controls style='display:none;'></audio>" if audio_path else "<audio controls style='display:none;'></audio>"
+                error_msg = message if message else "语音识别失败"
+                return history + [(audio_display, f"{error_msg}，请重试")], history, None, ""
         except Exception as e:
             # 捕获并处理音频处理过程中的任何异常
             print(f"处理录音时出错: {e}")
-            return history + [("<audio controls style='display:none;'></audio>", f"处理录音时出错: {str(e)}")], history, None, ""
+            # 确保audio_path已定义，如果未定义则使用空字符串
+            audio_display = f"<audio src='/{audio_path}' controls style='display:none;'></audio>" if audio_path else "<audio controls style='display:none;'></audio>"
+            return history + [(audio_display, f"处理录音时出错: {str(e)}")], history, None, ""
     
     # 如果消息为空，不进行处理直接返回
     if not message or message.strip() == "":
@@ -230,7 +257,7 @@ def handle_chat(message, history, lora_path, prompt_choice, promptFormat_choice,
     history_for_display = history.copy()
     
     # 根据输入类型更新历史记录
-    if audio is not None:
+    if audio is not None and audio_path is not None:
         # 如果是语音输入，添加带有隐藏音频控件的消息
         audio_message = f"{message} <audio src='/{audio_path}' controls style='display:none;'></audio>"
         history_for_display.append((audio_message, None))
@@ -666,13 +693,16 @@ def create_interface():
                     with gr.Column(scale=1):
                         # 语音输入组件，配置Gradio原生录音功能
                         # 设置元素ID为mic_input，与JavaScript中的选择器匹配
+                        # 不播放和显示录制的音频，录制和停止按钮始终可见
                         audio_input = gr.Audio(
                             label="Voice Input",  # 组件标签
                             elem_id="mic_input",  # HTML元素ID
                             visible=True,  # 可见性
-                            autoplay=True,  # 自动播放
+                            autoplay=False,  # 不自动播放录制的音频
                             show_download_button=False,  # 隐藏下载按钮
                             show_share_button=False,  # 隐藏分享按钮
+                            show_label=True,  # 显示标签
+                            waveform_options={"show_controls": False},  # 隐藏音频控制条
                             interactive=True,  # 允许用户交互
                             type="filepath",  # 返回文件路径而非音频数据
                             sources=["microphone"]  # 仅允许麦克风输入
@@ -774,130 +804,130 @@ def create_interface():
             chat_history = gr.State([])
             
             # 确保音频输入与聊天函数关联（在定义所有变量后）
-            audio_input.change(fn=handle_chat, inputs=[audio_input, chatbot, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice], outputs=[chatbot, chat_history, audio_output, audio_input])
+            # audio_input.change(fn=handle_chat, inputs=[audio_input, chatbot, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice], outputs=[chatbot, chat_history, audio_output, audio_input])
             
-            # 添加JavaScript代码，用于浏览器本地TTS
-            js_code = """
-                function browserTTS(text) {
-                    if ('speechSynthesis' in window) {
-                        // 创建语音合成实例
-                        const utterance = new SpeechSynthesisUtterance(text);
-                        // 设置语音参数
-                        utterance.rate = 1.0;  // 语速
-                        utterance.pitch = 1.0; // Pitch
-                        utterance.volume = 1.0; // Volume
-                        // Get Chinese voice
-                        const voices = window.speechSynthesis.getVoices();
-                        const chineseVoice = voices.find(voice => voice.lang.includes('zh'));
-                        if (chineseVoice) {
-                            utterance.voice = chineseVoice;
-                        }
-                        // Play voice
-                        window.speechSynthesis.speak(utterance);
-                        return true;
-                    }
-                    return false;
-                }
+            # # 添加JavaScript代码，用于浏览器本地TTS
+            # js_code = """
+            #     function browserTTS(text) {
+            #         if ('speechSynthesis' in window) {
+            #             // 创建语音合成实例
+            #             const utterance = new SpeechSynthesisUtterance(text);
+            #             // 设置语音参数
+            #             utterance.rate = 1.0;  // 语速
+            #             utterance.pitch = 1.0; // Pitch
+            #             utterance.volume = 1.0; // Volume
+            #             // Get Chinese voice
+            #             const voices = window.speechSynthesis.getVoices();
+            #             const chineseVoice = voices.find(voice => voice.lang.includes('zh'));
+            #             if (chineseVoice) {
+            #                 utterance.voice = chineseVoice;
+            #             }
+            #             // Play voice
+            #             window.speechSynthesis.speak(utterance);
+            #             return true;
+            #         }
+            #         return false;
+            #     }
                 
-                // Listen for chat reply updates and add avatars
-                document.addEventListener('DOMContentLoaded', function() {
-                    console.log('音频播放调试(JS): DOM加载完成，开始监听音频元素');
+            #     // Listen for chat reply updates and add avatars
+            #     document.addEventListener('DOMContentLoaded', function() {
+            #         console.log('音频播放调试(JS): DOM加载完成，开始监听音频元素');
                     
-                    // 监听音频元素加载
-                    document.addEventListener('play', function(e) {
-                        if (e.target.tagName === 'AUDIO') {
-                            console.log('音频播放调试(JS): 音频开始播放', e.target.src);
-                        }
-                    }, true);
+            #         // 监听音频元素加载
+            #         document.addEventListener('play', function(e) {
+            #             if (e.target.tagName === 'AUDIO') {
+            #                 console.log('音频播放调试(JS): 音频开始播放', e.target.src);
+            #             }
+            #         }, true);
                     
-                    document.addEventListener('error', function(e) {
-                        if (e.target.tagName === 'AUDIO') {
-                            console.log('音频播放调试(JS): 音频播放错误', e.target.src, e.target.error);
-                        }
-                    }, true);
+            #         document.addEventListener('error', function(e) {
+            #             if (e.target.tagName === 'AUDIO') {
+            #                 console.log('音频播放调试(JS): 音频播放错误', e.target.src, e.target.error);
+            #             }
+            #         }, true);
                     
-                    // 定期检查音频元素
-                    setInterval(function() {
-                        const audioElements = document.querySelectorAll('audio');
-                        console.log(`音频播放调试(JS): 当前页面有 ${audioElements.length} 个音频元素`);
-                        audioElements.forEach((audio, index) => {
-                            console.log(`音频播放调试(JS): 音频元素 ${index+1}:`, {
-                                src: audio.src,
-                                readyState: audio.readyState,
-                                paused: audio.paused,
-                                ended: audio.ended,
-                                error: audio.error
-                            });
-                        });
-                    }, 5000);
+            #         // 定期检查音频元素
+            #         setInterval(function() {
+            #             const audioElements = document.querySelectorAll('audio');
+            #             console.log(`音频播放调试(JS): 当前页面有 ${audioElements.length} 个音频元素`);
+            #             audioElements.forEach((audio, index) => {
+            #                 console.log(`音频播放调试(JS): 音频元素 ${index+1}:`, {
+            #                     src: audio.src,
+            #                     readyState: audio.readyState,
+            #                     paused: audio.paused,
+            #                     ended: audio.ended,
+            #                     error: audio.error
+            #                 });
+            #             });
+            #         }, 5000);
                     
-                    // Regularly check for new chat messages
-                    setInterval(function() {
-                        // TTS processing
-                        const ttsChoice = document.querySelector('input[name="tts_choice"]:checked');
-                        if (ttsChoice && ttsChoice.value === "Browser Local TTS") {
-                            console.log('音频播放调试(JS): 使用浏览器本地TTS');
-                            const chatMessages = document.querySelectorAll('.message:not(.user)');
-                            const lastMessage = chatMessages[chatMessages.length - 1];
-                            if (lastMessage && !lastMessage.hasAttribute('data-tts-processed')) {
-                                const messageText = lastMessage.textContent.trim();
-                                if (messageText) {
-                                    console.log('音频播放调试(JS): 尝试使用浏览器TTS播放消息', messageText.substring(0, 50) + '...');
-                                    browserTTS(messageText);
-                                    lastMessage.setAttribute('data-tts-processed', 'true');
-                                }
-                            }
-                        }
+            #         // Regularly check for new chat messages
+            #         setInterval(function() {
+            #             // TTS processing
+            #             const ttsChoice = document.querySelector('input[name="tts_choice"]:checked');
+            #             if (ttsChoice && ttsChoice.value === "Browser Local TTS") {
+            #                 console.log('音频播放调试(JS): 使用浏览器本地TTS');
+            #                 const chatMessages = document.querySelectorAll('.message:not(.user)');
+            #                 const lastMessage = chatMessages[chatMessages.length - 1];
+            #                 if (lastMessage && !lastMessage.hasAttribute('data-tts-processed')) {
+            #                     const messageText = lastMessage.textContent.trim();
+            #                     if (messageText) {
+            #                         console.log('音频播放调试(JS): 尝试使用浏览器TTS播放消息', messageText.substring(0, 50) + '...');
+            #                         browserTTS(messageText);
+            #                         lastMessage.setAttribute('data-tts-processed', 'true');
+            #                     }
+            #                 }
+            #             }
                         
-                        // Add avatars to all messages
-                        addAvatarsToMessages();
-                    }, 1000);
+            #             // Add avatars to all messages
+            #             addAvatarsToMessages();
+            #         }, 1000);
                     
-                    // Function to add avatars
-                    function addAvatarsToMessages() {
-                        // Get all message elements
-                        const userMessages = document.querySelectorAll('.message.user');
-                        const botMessages = document.querySelectorAll('.message.bot');
+            #         // Function to add avatars
+            #         function addAvatarsToMessages() {
+            #             // Get all message elements
+            #             const userMessages = document.querySelectorAll('.message.user');
+            #             const botMessages = document.querySelectorAll('.message.bot');
                         
-                        // 为用户消息添加头像
-                        userMessages.forEach(msg => {
-                            if (!msg.hasAttribute('data-avatar-added')) {
-                                const avatar = document.createElement('div');
-                                avatar.className = 'user-avatar';
-                                avatar.style.cssText = 'position:absolute;left:-40px;top:0;width:35px;height:35px;background-image:url("https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f464.png");background-size:cover;border-radius:50%;';
+            #             // 为用户消息添加头像
+            #             userMessages.forEach(msg => {
+            #                 if (!msg.hasAttribute('data-avatar-added')) {
+            #                     const avatar = document.createElement('div');
+            #                     avatar.className = 'user-avatar';
+            #                     avatar.style.cssText = 'position:absolute;left:-40px;top:0;width:35px;height:35px;background-image:url("https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f464.png");background-size:cover;border-radius:50%;';
                                 
-                                // 确保消息容器是相对定位
-                                msg.style.position = 'relative';
-                                msg.style.marginLeft = '40px';
-                                msg.style.marginBottom = '10px';
+            #                     // 确保消息容器是相对定位
+            #                     msg.style.position = 'relative';
+            #                     msg.style.marginLeft = '40px';
+            #                     msg.style.marginBottom = '10px';
                                 
-                                // 插入头像
-                                msg.insertBefore(avatar, msg.firstChild);
-                                msg.setAttribute('data-avatar-added', 'true');
-                            }
-                        });
+            #                     // 插入头像
+            #                     msg.insertBefore(avatar, msg.firstChild);
+            #                     msg.setAttribute('data-avatar-added', 'true');
+            #                 }
+            #             });
                         
-                        // 为机器人消息添加头像
-                        botMessages.forEach(msg => {
-                            if (!msg.hasAttribute('data-avatar-added')) {
-                                const avatar = document.createElement('div');
-                                avatar.className = 'bot-avatar';
-                                avatar.style.cssText = 'position:absolute;left:-40px;top:0;width:35px;height:35px;background-image:url("https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f916.png");background-size:cover;border-radius:50%;';
+            #             // 为机器人消息添加头像
+            #             botMessages.forEach(msg => {
+            #                 if (!msg.hasAttribute('data-avatar-added')) {
+            #                     const avatar = document.createElement('div');
+            #                     avatar.className = 'bot-avatar';
+            #                     avatar.style.cssText = 'position:absolute;left:-40px;top:0;width:35px;height:35px;background-image:url("https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f916.png");background-size:cover;border-radius:50%;';
                                 
-                                // 确保消息容器是相对定位
-                                msg.style.position = 'relative';
-                                msg.style.marginLeft = '40px';
-                                msg.style.marginBottom = '10px';
+            #                     // 确保消息容器是相对定位
+            #                     msg.style.position = 'relative';
+            #                     msg.style.marginLeft = '40px';
+            #                     msg.style.marginBottom = '10px';
                                 
-                                // 插入头像
-                                msg.insertBefore(avatar, msg.firstChild);
-                                msg.setAttribute('data-avatar-added', 'true');
-                            }
-                        });
-                    }
-                });
-                """
-            gr.HTML("<script>" + js_code + "</script>", visible=False)
+            #                     // 插入头像
+            #                     msg.insertBefore(avatar, msg.firstChild);
+            #                     msg.setAttribute('data-avatar-added', 'true');
+            #                 }
+            #             });
+            #         }
+            #     });
+            #     """
+            # gr.HTML("<script>" + js_code + "</script>", visible=False)
         
         # 事件处理部分 - 定义UI组件的交互行为
         # 提交按钮点击事件 - 处理文本输入并生成回复
@@ -930,14 +960,14 @@ def create_interface():
         )
         
         # 麦克风录音停止事件 - 录音结束后自动处理语音输入
-        audio_input.stop_recording(
-            fn=handle_chat,  # 处理函数
-            # 确保参数顺序与handle_chat函数定义一致
-            inputs=[msg, chatbot, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice, audio_input],
-            # 输出参数列表
-            outputs=[chatbot, chat_history, audio_output, msg],
-            api_name="mic_recording"  # API端点名称
-        )
+        # audio_input.stop_recording(
+        #     fn=handle_chat,  # 处理函数
+        #     # 确保参数顺序与handle_chat函数定义一致
+        #     inputs=[msg, chatbot, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice, audio_input],
+        #     # 输出参数列表
+        #     outputs=[chatbot, chat_history, audio_output, msg],
+        #     api_name="mic_recording"  # API端点名称
+        # )
         
         # 文件上传事件 - 处理上传的音频文件
         upload_btn.upload(
