@@ -547,7 +547,7 @@ def create_interface():
                     [],  # 初始为空列表
                     elem_id="chatbot",  # HTML元素ID，用于CSS和JavaScript选择
                     height=500,  # 设置高度
-                    avatar_images=("https://cdn.jsdelivir.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f464.png", "https://cdn-icons-png.flaticon.com/512/4712/4712035.png"),  # 用户和机器人头像
+                    avatar_images=None,  # 移除头像图片，使用CSS自定义头像
                 )
                 
                 # 消息输入区域布局
@@ -1037,44 +1037,60 @@ def create_interface():
             position: relative !important;      /* 相对定位 */
         }
         
-        /* 用户头像样式 - 使用表情符号作为头像 */
-        #chatbot .user::before {
-            content: '' !important;              /* 伪元素内容 */
+        /* 强制覆盖所有可能的Gradio头像选择器 - 用户头像 */
+        #chatbot .user::before,
+        .chatbot .user::before,
+        [data-testid="chatbot"] .user::before,
+        .message-wrap .user::before,
+        .message.user::before,
+        .message-wrap .message.user::before,
+        .chatbot .message.user::before {
+            content: '👤' !important;            /* 用户表情符号 */
             position: absolute !important;      /* 绝对定位 */
             left: -40px !important;             /* 左侧位置 */
-            top: 0 !important;                  /* 顶部位置 */
+            top: 50% !important;                /* 垂直居中位置 */
+            transform: translateY(-50%) !important; /* 垂直居中对齐 */
             width: 35px !important;             /* 头像宽度 */
             height: 35px !important;            /* 头像高度 */
-            background-image: url('https://cdn.jsdelivir.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f464.png') !important; /* 用户头像图片 */
-            background-size: cover !important;   /* 背景图片覆盖 */
+            background-color: #4CAF50 !important; /* 绿色背景 */
+            background-image: none !important;  /* 强制移除背景图片 */
+            color: white !important;            /* 白色表情符号 */
+            display: flex !important;           /* 弹性布局 */
+            align-items: center !important;     /* 垂直居中 */
+            justify-content: center !important; /* 水平居中 */
+            font-size: 18px !important;         /* 表情符号大小 */
             border-radius: 50% !important;      /* 圆形头像 */
-            z-index: 100 !important;            /* 层级 */
+            z-index: 9999 !important;           /* 最高层级 */
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important; /* 轻微阴影 */
         }
         
-        /* 机器人消息气泡样式 - 使用浅蓝色背景 */
-        #chatbot .bot {
-            background-color: #e6f7ff;          /* 浅蓝色背景 */
-            border-radius: 10px;                /* 圆角边框 */
-            padding: 10px 15px;                 /* 内部填充 */
-            margin-bottom: 10px;                /* 底部外边距 */
-            margin-left: 40px !important;       /* 左侧留出头像空间 */
-            position: relative !important;      /* 相对定位 */
-        }
-        
-        /* 机器人头像样式 - 使用机器人表情符号作为头像 */
-        #chatbot .bot::before {
-            content: '' !important;              /* 伪元素内容 */
+        /* 强制覆盖所有可能的Gradio头像选择器 - 机器人头像 */
+        #chatbot .bot::before,
+        .chatbot .bot::before,
+        [data-testid="chatbot"] .bot::before,
+        .message-wrap .bot::before,
+        .message.bot::before,
+        .message-wrap .message.bot::before,
+        .chatbot .message.bot::before {
+            content: '🤖' !important;            /* 机器人表情符号 */
             position: absolute !important;      /* 绝对定位 */
             left: -40px !important;             /* 左侧位置 */
-            top: 0 !important;                  /* 顶部位置 */
+            top: 50% !important;                /* 垂直居中位置 */
+            transform: translateY(-50%) !important; /* 垂直居中对齐 */
             width: 35px !important;             /* 头像宽度 */
             height: 35px !important;            /* 头像高度 */
-            background-image: url('https://cdn.jsdelivir.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f916.png') !important; /* 机器人头像图片 */
-            background-size: cover !important;   /* 背景图片覆盖 */
+            background-color: #2196F3 !important; /* 蓝色背景 */
+            background-image: none !important;  /* 强制移除背景图片 */
+            color: white !important;            /* 白色表情符号 */
+            display: flex !important;           /* 弹性布局 */
+            align-items: center !important;     /* 垂直居中 */
+            justify-content: center !important; /* 水平居中 */
+            font-size: 18px !important;         /* 表情符号大小 */
             border-radius: 50% !important;      /* 圆形头像 */
-            z-index: 100 !important;            /* 层级 */
+            z-index: 9999 !important;           /* 最高层级 */
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important; /* 轻微阴影 */
         }
-        
+
         /* 优化音频输入组件显示 - 移除边框并添加上边距 */
         #mic_input {
             margin-top: 10px;                   /* 顶部外边距 */
