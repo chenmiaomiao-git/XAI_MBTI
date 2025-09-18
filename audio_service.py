@@ -81,7 +81,7 @@ class AudioService:
         
         Args:
             audio_file_path: 音频文件路径
-            language: 语言选择，支持 "Chinese", "English", "Japanese", "French"
+            language: 语言选择，支持 "Chinese", "English"
         """
         token = cls.get_baidu_access_token()
         if not token:
@@ -112,10 +112,6 @@ class AudioService:
             dev_pid = 1537  # 普通话模型
         elif language == "English":
             dev_pid = 1737  # 英语模型
-        elif language == "Japanese":
-            dev_pid = 1737  # 使用英语模型（百度API不直接支持日语，可以考虑其他服务）
-        elif language == "French":
-            dev_pid = 1737  # 使用英语模型（百度API不直接支持法语，可以考虑其他服务）
         
         url = "https://vop.baidu.com/server_api"
         headers = {

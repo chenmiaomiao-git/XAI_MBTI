@@ -124,7 +124,7 @@ from chat_service import ChatService
 # ============================================================================
 
 # 处理音频输入函数
-def handle_audio(audio, history, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice):
+def handle_audio(audio, history, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice, asr_language_choice):
     """
     处理用户的音频输入，将其转换为文本并生成回复
     
@@ -136,6 +136,7 @@ def handle_audio(audio, history, lora_path, prompt_choice, promptFormat_choice, 
         promptFormat_choice: 选择的提示格式
         tts_choice: 选择的语音合成风格
         reply_language_choice: 选择的回复语言
+        asr_language_choice: 选择的ASR识别语言
         
     返回:
         chatbot_output: 更新后的聊天界面历史
@@ -148,16 +149,16 @@ def handle_audio(audio, history, lora_path, prompt_choice, promptFormat_choice, 
     if isinstance(audio, tuple):
         # 如果是录音数据，使用语音识别服务将其转换为文本
         audio_data, sample_rate = audio
-        # 根据选择的回复语言设置ASR语言
-        asr_result = AudioService.asr_recognize_from_numpy(audio_data, sample_rate, language=reply_language_choice)
+        # 根据选择的ASR语言设置语音识别语言
+        asr_result = AudioService.asr_recognize_from_numpy(audio_data, sample_rate, language=asr_language_choice)
         audio = None  # 清空音频输入，因为已经转换为文本
     
     # 调用handle_chat函数处理音频输入，传入识别结果作为文本消息参数
-    chatbot_output, chat_history_output, audio_output, _ = handle_chat(asr_result, history, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice, audio)
+    chatbot_output, chat_history_output, audio_output, _ = handle_chat(asr_result, history, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice, asr_language_choice, audio)
     return chatbot_output, chat_history_output, audio_output, ""
 
 # 处理聊天提交函数 - 应用程序的核心功能
-def handle_chat(message, history, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice, audio=None):
+def handle_chat(message, history, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice, asr_language_choice=None, audio=None):
     """
     处理用户的聊天输入（文本或音频），生成回复并合成语音
     
@@ -168,6 +169,8 @@ def handle_chat(message, history, lora_path, prompt_choice, promptFormat_choice,
         prompt_choice: 选择的提示模板（如'assist_estj', 'assist_infp'等）
         promptFormat_choice: 选择的提示格式（如'ordinary', 'custom'）
         tts_choice: 选择的语音合成风格（如'Standard Voice', 'Soft Female Voice'等）
+        reply_language_choice: 选择的回复语言
+        asr_language_choice: 选择的ASR识别语言（可选）
         audio: 可选的音频输入，可以是文件路径或音频数据元组
         
     返回:
@@ -220,8 +223,9 @@ def handle_chat(message, history, lora_path, prompt_choice, promptFormat_choice,
             import shutil
             shutil.copy(temp_audio.name, audio_path)
             
-            # 调用语音识别服务将音频转换为文本，传递语言参数
-            message = AudioService.asr_recognize(temp_audio.name, language=reply_language_choice)
+            # 调用语音识别服务将音频转换为文本，使用ASR语言选择
+            asr_lang = asr_language_choice if asr_language_choice else reply_language_choice
+            message = AudioService.asr_recognize(temp_audio.name, language=asr_lang)
             os.unlink(temp_audio.name)  # 删除临时文件，释放空间
             
             # 检查语音识别结果，如果失败则返回错误信息
@@ -384,7 +388,7 @@ def handle_chat(message, history, lora_path, prompt_choice, promptFormat_choice,
     return history_for_display, chat_history + [(message, reply)], None, ""
 
 # 处理文件上传函数
-def handle_upload(file, history, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice):
+def handle_upload(file, history, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice, asr_language_choice):
     """
     处理用户上传的音频文件，将其转换为文本并生成回复
     
@@ -396,6 +400,7 @@ def handle_upload(file, history, lora_path, prompt_choice, promptFormat_choice, 
         promptFormat_choice: 选择的提示格式
         tts_choice: 选择的语音合成风格
         reply_language_choice: 选择的回复语言
+        asr_language_choice: 选择的ASR识别语言
         
     返回:
         history_for_display: 更新后的聊天界面历史
@@ -407,8 +412,8 @@ def handle_upload(file, history, lora_path, prompt_choice, promptFormat_choice, 
     if file is None:
         return history, history
     
-    # 调用语音识别服务将上传的音频文件转换为文本，根据选择的语言设置ASR
-    message = AudioService.asr_recognize(file.name, language=reply_language_choice)
+    # 调用语音识别服务将上传的音频文件转换为文本，使用ASR语言选择
+    message = AudioService.asr_recognize(file.name, language=asr_language_choice)
     
     # 检查语音识别结果，如果失败则返回错误信息
     if not message or message == "语音识别失败" or message == "语音识别请求失败" or message == "Unable to get Baidu access token":
@@ -797,6 +802,13 @@ def create_interface():
                     value="English"  # 默认使用英文回复
                 )
                 
+                # ASR语言选择 - 控制语音识别的语言
+                asr_language_choice = gr.Radio(
+                    ["Chinese", "English"],  # ASR只支持中文和英文
+                    label="ASR Language Selection",  # 标签
+                    value="English"  # 默认使用英文识别
+                )
+                
                 # 清除聊天按钮 - 重置对话历史
                 clear_btn = gr.Button("Clear Chat")
             
@@ -894,7 +906,7 @@ def create_interface():
             #                 if (!msg.hasAttribute('data-avatar-added')) {
             #                     const avatar = document.createElement('div');
             #                     avatar.className = 'user-avatar';
-            #                     avatar.style.cssText = 'position:absolute;left:-40px;top:0;width:35px;height:35px;background-image:url("https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f464.png");background-size:cover;border-radius:50%;';
+            #                     avatar.style.cssText = 'position:absolute;left:-40px;top:0;width:35px;height:35px;background-image:url("https://cdn.jsdelivir.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f464.png");background-size:cover;border-radius:50%;';
                                 
             #                     // 确保消息容器是相对定位
             #                     msg.style.position = 'relative';
@@ -912,7 +924,7 @@ def create_interface():
             #                 if (!msg.hasAttribute('data-avatar-added')) {
             #                     const avatar = document.createElement('div');
             #                     avatar.className = 'bot-avatar';
-            #                     avatar.style.cssText = 'position:absolute;left:-40px;top:0;width:35px;height:35px;background-image:url("https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f916.png");background-size:cover;border-radius:50%;';
+            #                     avatar.style.cssText = 'position:absolute;left:-40px;top:0;width:35px;height:35px;background-image:url("https://cdn.jsdelivir.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f916.png");background-size:cover;border-radius:50%;';
                                 
             #                     // 确保消息容器是相对定位
             #                     msg.style.position = 'relative';
@@ -953,7 +965,7 @@ def create_interface():
         audio_input.change(
             fn=handle_audio,  # 处理函数
             # 输入参数列表
-            inputs=[audio_input, chatbot, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice],
+            inputs=[audio_input, chatbot, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice, asr_language_choice],
             # 输出参数列表
             outputs=[chatbot, chat_history, audio_output, msg],
             api_name="audio"  # API端点名称
@@ -973,7 +985,7 @@ def create_interface():
         upload_btn.upload(
             fn=handle_upload,  # 处理函数
             # 输入参数列表
-            inputs=[upload_btn, chatbot, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice],
+            inputs=[upload_btn, chatbot, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice, asr_language_choice],
             # 输出参数列表
             outputs=[chatbot, chat_history, audio_output, msg],
             api_name="upload"  # API端点名称
@@ -1033,7 +1045,7 @@ def create_interface():
             top: 0 !important;                  /* 顶部位置 */
             width: 35px !important;             /* 头像宽度 */
             height: 35px !important;            /* 头像高度 */
-            background-image: url('https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f464.png') !important; /* 用户头像图片 */
+            background-image: url('https://cdn.jsdelivir.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f464.png') !important; /* 用户头像图片 */
             background-size: cover !important;   /* 背景图片覆盖 */
             border-radius: 50% !important;      /* 圆形头像 */
             z-index: 100 !important;            /* 层级 */
@@ -1057,7 +1069,7 @@ def create_interface():
             top: 0 !important;                  /* 顶部位置 */
             width: 35px !important;             /* 头像宽度 */
             height: 35px !important;            /* 头像高度 */
-            background-image: url('https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f916.png') !important; /* 机器人头像图片 */
+            background-image: url('https://cdn.jsdelivir.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f916.png') !important; /* 机器人头像图片 */
             background-size: cover !important;   /* 背景图片覆盖 */
             border-radius: 50% !important;      /* 圆形头像 */
             z-index: 100 !important;            /* 层级 */
