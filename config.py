@@ -40,6 +40,6 @@ DEFAULT_VOICE_PERSON = 0  # 发音人，0女1男3度逍遥4度丫丫
 
 # 界面配置
 APP_TITLE = "XAI-MBTI"
-APP_SUBTITLE = "智能对话系统 - 基于MBTI人格的AI助手"
+APP_SUBTITLE = "Intelligent Dialogue System - MBTI Personality-based AI Assistant"
 APP_THEME = "soft"
 APP_PRIMARY_COLOR = "blue"

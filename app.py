@@ -20,6 +20,95 @@ from typing import List, Tuple, Optional, Dict, Any
 # 导入时间处理模块
 import time
 
+# 音频文件检查函数
+def check_audio_file(file_path):
+    """检查音频文件是否有效并返回详细信息"""
+    if not file_path:
+        return {"valid": False, "error": "文件路径为空"}
+    
+    try:
+        if not os.path.exists(file_path):
+            return {"valid": False, "error": "文件不存在", "path": file_path}
+        
+        file_size = os.path.getsize(file_path)
+        if file_size == 0:
+            return {"valid": False, "error": "文件大小为0", "path": file_path, "size": 0}
+        
+        # 尝试读取文件头部，检查是否为有效的MP3文件
+        with open(file_path, "rb") as f:
+            header = f.read(4)
+            # MP3文件可能的头部格式：
+            # - ID3标签开头
+            # - MPEG帧头开头（各种变体）
+            is_mp3 = (
+                header.startswith(b"ID3") or  # ID3标签
+                (header[0] == 0xff and (header[1] & 0xe0) == 0xe0)  # MPEG帧头：前11位都是1
+            )
+            
+            if not is_mp3:
+                # 对于火山引擎等TTS服务，可能返回其他有效的音频格式
+                # 如果文件大小合理，我们认为它是有效的
+                if file_size > 1000:  # 至少1KB的音频数据
+                    print(f"音频文件验证: 文件头部不是标准MP3格式但文件大小合理，认为有效: {header.hex()}")
+                    is_mp3 = True
+                else:
+                    return {"valid": False, "error": "不是有效的MP3文件", "path": file_path, "size": file_size, "header": header.hex()}
+        
+        return {"valid": True, "path": file_path, "size": file_size}
+    except Exception as e:
+        return {"valid": False, "error": str(e), "path": file_path}
+
+# 测试音频文件可访问性函数
+def test_audio_accessibility(file_path):
+    """测试音频文件是否可以被Web服务器访问"""
+    if not file_path or not os.path.exists(file_path):
+        return {"accessible": False, "error": "文件不存在"}
+    
+    try:
+        # 检查文件权限
+        file_stat = os.stat(file_path)
+        file_mode = oct(file_stat.st_mode)[-3:]
+        
+        # 检查文件是否可读
+        readable = os.access(file_path, os.R_OK)
+        
+        # 获取文件的绝对路径
+        abs_path = os.path.abspath(file_path)
+        
+        # 检查文件是否在临时目录中
+        temp_dir = tempfile.gettempdir()
+        in_temp_dir = abs_path.startswith(temp_dir)
+        
+        # 创建一个符号链接到静态目录，使文件可通过Web访问（仅用于测试）
+        static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+        if not os.path.exists(static_dir):
+            os.makedirs(static_dir, exist_ok=True)
+        
+        link_path = os.path.join(static_dir, os.path.basename(file_path))
+        try:
+            # 如果链接已存在，先删除
+            if os.path.exists(link_path):
+                os.remove(link_path)
+            # 创建硬链接（不是符号链接，因为某些系统可能限制符号链接）
+            os.link(file_path, link_path)
+            link_created = True
+        except Exception as e:
+            link_created = False
+            link_error = str(e)
+        
+        return {
+            "accessible": readable,
+            "path": file_path,
+            "abs_path": abs_path,
+            "permissions": file_mode,
+            "in_temp_dir": in_temp_dir,
+            "link_created": link_created,
+            "link_path": link_path if link_created else None,
+            "link_error": link_error if not link_created else None
+        }
+    except Exception as e:
+        return {"accessible": False, "error": str(e), "path": file_path}
+
 # 导入自定义服务模块
 # AudioService: 处理语音识别和语音合成功能
 from audio_service import AudioService
@@ -35,7 +124,7 @@ from chat_service import ChatService
 # ============================================================================
 
 # 处理音频输入函数
-def handle_audio(audio, history, lora_path, prompt_choice, promptFormat_choice, tts_choice):
+def handle_audio(audio, history, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice):
     """
     处理用户的音频输入，将其转换为文本并生成回复
     
@@ -46,6 +135,7 @@ def handle_audio(audio, history, lora_path, prompt_choice, promptFormat_choice, 
         prompt_choice: 选择的提示模板
         promptFormat_choice: 选择的提示格式
         tts_choice: 选择的语音合成风格
+        reply_language_choice: 选择的回复语言
         
     返回:
         chatbot_output: 更新后的聊天界面历史
@@ -53,12 +143,20 @@ def handle_audio(audio, history, lora_path, prompt_choice, promptFormat_choice, 
         audio_output: 生成的回复音频路径
         "": 清空输入框
     """
+    # 如果是音频输入，先根据选择的语言进行语音识别
+    if isinstance(audio, tuple):
+        # 如果是录音数据，使用语音识别服务将其转换为文本
+        audio_data, sample_rate = audio
+        # 根据选择的回复语言设置ASR语言
+        asr_result = AudioService.asr_recognize_from_numpy(audio_data, sample_rate, language=reply_language_choice)
+        audio = None  # 清空音频输入，因为已经转换为文本
+    
     # 调用handle_chat函数处理音频输入，传入None作为文本消息参数
-    chatbot_output, chat_history_output, audio_output, _ = handle_chat(None, history, lora_path, prompt_choice, promptFormat_choice, tts_choice, audio)
+    chatbot_output, chat_history_output, audio_output, _ = handle_chat(asr_result if 'asr_result' in locals() else None, history, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice, audio)
     return chatbot_output, chat_history_output, audio_output, ""
 
 # 处理聊天提交函数 - 应用程序的核心功能
-def handle_chat(message, history, lora_path, prompt_choice, promptFormat_choice, tts_choice, audio=None):
+def handle_chat(message, history, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice, audio=None):
     """
     处理用户的聊天输入（文本或音频），生成回复并合成语音
     
@@ -140,43 +238,107 @@ def handle_chat(message, history, lora_path, prompt_choice, promptFormat_choice,
         # 如果是文本输入，直接添加消息
         history_for_display.append((message, None))
     
-    # 在用户消息后添加英文回复请求（不显示在前端，但传给模型）
-    message_with_english_request = message + " Please answer in English."
+    # 根据选择的回复语言添加相应的请求（不显示在前端，但传给模型）
+    if reply_language_choice == "Chinese":
+        message_with_language_request = message + " 请用中文回答"
+    elif reply_language_choice == "English":
+        message_with_language_request = message + " Please answer in English"
+    elif reply_language_choice == "Japanese":
+        message_with_language_request = message + " 日本語で答えてください"
+    else:
+        # 默认使用英文
+        message_with_language_request = message + " Please answer in English"
     
     # 准备聊天历史数据，过滤掉没有回复的消息
     chat_history = [(h[0], h[1]) for h in history if h[1] is not None]
     
     # 调用聊天服务发送请求并获取回复
-    response = ChatService.send_chat_request(message_with_english_request, chat_history, lora_path, prompt_choice, promptFormat_choice)
+    response = ChatService.send_chat_request(message_with_language_request, chat_history, lora_path, prompt_choice, promptFormat_choice)
     
     # 从响应中获取回复文本，如果没有则使用默认错误消息
     reply = response.get("reply", "Sorry, the server did not return a valid reply")
     
     # 根据选择的TTS风格进行语音合成
-    if tts_choice == "Standard Voice":
-        # 使用标准女声配置
-        audio_path = AudioService.tts_synthesize(reply)
-    elif tts_choice == "Soft Female Voice":
-        # 使用温柔女声配置（度丫丫音色，降低语速，提高音调）
-        audio_path = AudioService.tts_synthesize(reply, spd=4, pit=6, per=4)
-    elif tts_choice == "Energetic Male Voice":
-        # 使用活力男声配置（度逍遥音色，提高语速和音调）
-        audio_path = AudioService.tts_synthesize(reply, spd=6, pit=6, per=3)
-    elif tts_choice == "Volcano Engine TTS":
-        # 使用火山引擎TTS
-        audio_path = AudioService.tts_synthesize(reply, tts_engine="volcano")
+    print(f"音频播放调试: 开始语音合成，TTS选择 = {tts_choice}, 回复语言 = {reply_language_choice}")
+    print(f"音频播放调试: 回复文本长度 = {len(reply)}")
+    
+    if tts_choice == "Soft Female Voice - Cancan (Normal)":
+        # 使用火山引擎TTS - 灿灿音色，标准语速和音调
+        print("音频播放调试: 使用火山引擎TTS - 灿灿音色，标准语速和音调")
+        audio_file_path = AudioService.tts_synthesize(reply, tts_engine="volcano", language=reply_language_choice, 
+                                              voice_type="BV700_streaming", speed=1.0, pitch=1.0)
+    elif tts_choice == "Energetic Female Voice - Cancan (Fast)":
+        # 使用火山引擎TTS - 灿灿音色，快速语速和高音调
+        print("音频播放调试: 使用火山引擎TTS - 灿灿音色，快速语速和高音调")
+        audio_file_path = AudioService.tts_synthesize(reply, tts_engine="volcano", language=reply_language_choice, 
+                                              voice_type="BV700_streaming", speed=1.3, pitch=1.2)
+    elif tts_choice == "Calm Male Voice - Qingcang (Normal)":
+        # 使用火山引擎TTS - 擎苍音色，标准语速和音调
+        print("音频播放调试: 使用火山引擎TTS - 擎苍音色，标准语速和音调")
+        audio_file_path = AudioService.tts_synthesize(reply, tts_engine="volcano", language=reply_language_choice, 
+                                              voice_type="BV701_streaming", speed=1.0, pitch=1.0)
+    elif tts_choice == "Enthusiastic Male Voice - Qingcang (Fast)":
+        # 使用火山引擎TTS - 擎苍音色，快速语速和高音调
+        print("音频播放调试: 使用火山引擎TTS - 擎苍音色，快速语速和高音调")
+        audio_file_path = AudioService.tts_synthesize(reply, tts_engine="volcano", language=reply_language_choice, 
+                                              voice_type="BV701_streaming", speed=1.3, pitch=1.2)
+    elif tts_choice == "Professional Foreign Voice - Stefan (Normal)":
+        # 使用火山引擎TTS - Stefan音色，标准语速和音调
+        print("音频播放调试: 使用火山引擎TTS - Stefan音色，标准语速和音调")
+        audio_file_path = AudioService.tts_synthesize(reply, tts_engine="volcano", language=reply_language_choice, 
+                                              voice_type="BV702_streaming", speed=1.0, pitch=1.0)
+    elif tts_choice == "Expressive Foreign Voice - Stefan (Fast)":
+        # 使用火山引擎TTS - Stefan音色，快速语速和高音调
+        print("音频播放调试: 使用火山引擎TTS - Stefan音色，快速语速和高音调")
+        audio_file_path = AudioService.tts_synthesize(reply, tts_engine="volcano", language=reply_language_choice, 
+                                              voice_type="BV702_streaming", speed=1.3, pitch=1.2)
     else:
-        # 默认使用标准配置
-        audio_path = AudioService.tts_synthesize(reply)
+        # 默认使用火山引擎TTS - 灿灿音色，标准语速和音调
+        print("音频播放调试: 使用默认火山引擎TTS - 灿灿音色，标准语速和音调")
+        audio_file_path = AudioService.tts_synthesize(reply, tts_engine="volcano", language=reply_language_choice, 
+                                              voice_type="BV700_streaming", speed=1.0, pitch=1.0)
+    
+    # 将文件路径赋值给audio_path变量，保持与后续代码兼容
+    audio_path = audio_file_path
     
     # 更新显示历史，将最后一条用户消息与AI回复配对
     history_for_display[-1] = (message, reply)
     
-    # 返回更新后的历史、聊天记录、音频路径和空字符串（清空输入框）
-    return history_for_display, chat_history + [(message, reply)], audio_path, ""
+    # 检查文件是否在静态目录中，如果不是，则复制到静态目录
+    static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+    if not os.path.exists(static_dir):
+        os.makedirs(static_dir, exist_ok=True)
+    
+    # 直接使用TTS返回的音频文件
+    if audio_path and os.path.exists(audio_path):
+        try:
+            # 获取文件名
+            filename = os.path.basename(audio_path)
+            # 构建静态目录中的目标路径
+            static_audio_path = os.path.join(static_dir, filename)
+            
+            # 如果文件不在静态目录中，复制到静态目录
+            if audio_path != static_audio_path:
+                import shutil
+                shutil.copy2(audio_path, static_audio_path)
+            
+            # 构建相对URL路径
+            relative_path = os.path.join("static", filename)
+            
+            # 不在对话框中添加音频标签，只返回音频路径供专门的卡片播放
+            history_for_display[-1] = (history_for_display[-1][0], reply)
+            
+            # 返回结果，使用绝对文件路径而非URL路径
+            audio_output_value = static_audio_path
+            return history_for_display, chat_history + [(message, reply)], audio_output_value, ""
+        except Exception as e:
+            print(f"音频处理失败: {e}")
+    
+    # 如果所有方法都失败，返回没有音频的结果
+    return history_for_display, chat_history + [(message, reply)], None, ""
 
 # 处理文件上传函数
-def handle_upload(file, history, lora_path, prompt_choice, promptFormat_choice, tts_choice):
+def handle_upload(file, history, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice):
     """
     处理用户上传的音频文件，将其转换为文本并生成回复
     
@@ -187,6 +349,7 @@ def handle_upload(file, history, lora_path, prompt_choice, promptFormat_choice, 
         prompt_choice: 选择的提示模板
         promptFormat_choice: 选择的提示格式
         tts_choice: 选择的语音合成风格
+        reply_language_choice: 选择的回复语言
         
     返回:
         history_for_display: 更新后的聊天界面历史
@@ -198,11 +361,11 @@ def handle_upload(file, history, lora_path, prompt_choice, promptFormat_choice, 
     if file is None:
         return history, history
     
-    # 调用语音识别服务将上传的音频文件转换为文本
-    message = AudioService.asr_recognize(file.name)
+    # 调用语音识别服务将上传的音频文件转换为文本，根据选择的语言设置ASR
+    message = AudioService.asr_recognize(file.name, language=reply_language_choice)
     
     # 检查语音识别结果，如果失败则返回错误信息
-    if not message or message == "语音识别失败" or message == "语音识别请求失败":
+    if not message or message == "语音识别失败" or message == "语音识别请求失败" or message == "Unable to get Baidu access token":
         return history + [("<audio src='" + file.name + "' controls style='display:none;'></audio>", "Speech recognition failed, please try again")], history
     
     # 创建历史记录的副本用于显示
@@ -210,37 +373,93 @@ def handle_upload(file, history, lora_path, prompt_choice, promptFormat_choice, 
     # 添加用户消息到历史记录
     history_for_display.append((message, None))
     
-    # 在用户消息后添加英文回复请求（不显示在前端，但传给模型）
-    message_with_english_request = message + " Please answer in English."
+    # 根据选择的回复语言添加相应的请求（不显示在前端，但传给模型）
+    if reply_language_choice == "Chinese":
+        message_with_language_request = message + " 请用中文回答"
+    elif reply_language_choice == "English":
+        message_with_language_request = message + " Please answer in English"
+    elif reply_language_choice == "Japanese":
+        message_with_language_request = message + " 日本語で答えてください"
+    elif reply_language_choice == "French":
+        message_with_language_request = message + " Veuillez répondre en français"
+    else:
+        # 默认使用英文
+        message_with_language_request = message + " Please answer in English"
     
     # 准备聊天历史数据，过滤掉没有回复的消息
     chat_history = [(h[0], h[1]) for h in history if h[1] is not None]
     # 调用聊天服务发送请求并获取回复
-    response = ChatService.send_chat_request(message_with_english_request, chat_history, lora_path, prompt_choice, promptFormat_choice)
+    response = ChatService.send_chat_request(message_with_language_request, chat_history, lora_path, prompt_choice, promptFormat_choice)
     
     # 从响应中获取回复文本，如果没有则使用默认错误消息
     reply = response.get("reply", "抱歉，服务器没有返回有效回复")
     
     # 根据选择的TTS风格进行语音合成
-    # 注意：这里的TTS选择标签与handle_chat函数中的不同，使用中文标签
-    if tts_choice == "标准语音":
+    if tts_choice == "Standard Voice":
         # 使用标准女声配置
-        audio_path = AudioService.tts_synthesize(reply)
-    elif tts_choice == "温柔女声":
+        audio_path = AudioService.tts_synthesize(reply, language=reply_language_choice)
+    elif tts_choice == "Gentle Female Voice":
         # 使用温柔女声配置（度丫丫音色，降低语速，提高音调）
-        audio_path = AudioService.tts_synthesize(reply, spd=4, pit=6, per=4)
-    elif tts_choice == "活力男声":
+        audio_path = AudioService.tts_synthesize(reply, spd=4, pit=6, per=4, language=reply_language_choice)
+    elif tts_choice == "Energetic Male Voice":
         # 使用活力男声配置（度逍遥音色，提高语速和音调）
-        audio_path = AudioService.tts_synthesize(reply, spd=6, pit=6, per=3)
+        audio_path = AudioService.tts_synthesize(reply, spd=6, pit=6, per=3, language=reply_language_choice)
+    elif tts_choice == "Volcano Engine TTS":
+        # 使用火山引擎TTS
+        audio_path = AudioService.tts_synthesize(reply, tts_engine="volcano", language=reply_language_choice)
     else:
         # 默认使用标准配置
-        audio_path = AudioService.tts_synthesize(reply)
+        audio_path = AudioService.tts_synthesize(reply, language=reply_language_choice)
     
     # 更新显示历史，将最后一条用户消息与AI回复配对
     history_for_display[-1] = (message, reply)
     
-    # 返回更新后的历史、聊天记录、音频路径和空字符串（清空输入框）
-    return history_for_display, chat_history + [(message, reply)], audio_path, ""
+    # 处理音频文件，转换为numpy格式供Gradio使用
+    audio_output_value = None
+    if audio_path and os.path.exists(audio_path):
+        try:
+            import soundfile as sf
+            import numpy as np
+            data, samplerate = sf.read(audio_path)
+            # 确保数据类型为float32，并且在[-1, 1]范围内
+            if data.dtype != np.float32:
+                data = data.astype(np.float32)
+            # 如果数据超出范围，进行归一化
+            if np.max(np.abs(data)) > 1.0:
+                data = data / np.max(np.abs(data))
+            print(f"音频播放调试: handle_upload成功读取音频文件，采样率 = {samplerate}，形状 = {data.shape}，数据类型 = {data.dtype}")
+            audio_output_value = (int(samplerate), data)
+        except Exception as e:
+            print(f"音频播放调试: handle_upload读取音频文件失败 - {e}")
+            try:
+                from pydub import AudioSegment
+                import numpy as np
+                audio = AudioSegment.from_file(audio_path, format="mp3")
+                # 转换为numpy数组
+                samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
+                # 如果是立体声，取一个声道
+                if audio.channels == 2:
+                    samples = samples.reshape((-1, 2))[:, 0]
+                # 归一化到[-1, 1]范围
+                if audio.sample_width == 2:  # 16-bit
+                    samples = samples / 32768.0
+                elif audio.sample_width == 4:  # 32-bit
+                    samples = samples / 2147483648.0
+                else:
+                    samples = samples / np.max(np.abs(samples)) if np.max(np.abs(samples)) > 0 else samples
+                audio_output_value = (int(audio.frame_rate), samples)
+                print(f"音频播放调试: handle_upload使用pydub成功读取音频，数据类型 = {samples.dtype}")
+            except Exception as e2:
+                print(f"音频播放调试: handle_upload所有方法都失败 - {e2}")
+                import numpy as np
+                audio_output_value = (16000, np.zeros(1000, dtype=np.int16))
+    else:
+        print(f"音频播放调试: handle_upload音频文件不存在: {audio_path}")
+        import numpy as np
+        audio_output_value = (16000, np.zeros(1000, dtype=np.int16))
+    
+    # 返回更新后的历史、聊天记录、音频数据和空字符串（清空输入框）
+    return history_for_display, chat_history + [(message, reply)], audio_output_value, ""
 
 # ============================================================================
 # UI界面创建部分
@@ -442,8 +661,49 @@ def create_interface():
                         # 录音状态显示区域，由JavaScript更新
                         recording_status = gr.HTML("", elem_id="recording_status", visible=True)
                 
-                # 语音回复播放组件
-                audio_output = gr.Audio(label="Voice Reply", visible=True, autoplay=True)  # 自动播放AI回复的语音
+                # 简化的语音回复播放组件
+                audio_output = gr.Audio(
+                    label=None,  # 移除标签
+                    visible=True, 
+                    autoplay=True, 
+                    type="filepath",  # 使用文件路径类型
+                    show_download_button=False,  # 隐藏下载按钮
+                    show_share_button=False,  # 隐藏分享按钮
+                    elem_id="voice_reply_audio"  # 添加元素ID便于调试
+                )
+                # 添加JavaScript以在页面上显示调试信息
+                gr.HTML("""
+                <script>
+                function updateDebugInfo(message) {
+                    const debugElement = document.getElementById('audio_debug_info');
+                    if (debugElement) {
+                        const timestamp = new Date().toLocaleTimeString();
+                        debugElement.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+                        // 保持最新的消息可见
+                        debugElement.scrollTop = debugElement.scrollHeight;
+                    }
+                }
+                
+                // 监听音频元素事件
+                document.addEventListener('DOMNodeInserted', function(e) {
+                    if (e.target.tagName === 'AUDIO') {
+                        updateDebugInfo(`发现新的音频元素: ${e.target.src.substring(0, 50)}...`);
+                        
+                        e.target.addEventListener('play', function() {
+                            updateDebugInfo(`音频开始播放: ${this.src.substring(0, 50)}...`);
+                        });
+                        
+                        e.target.addEventListener('error', function() {
+                            updateDebugInfo(`音频播放错误: ${this.src.substring(0, 50)}... 错误代码: ${this.error ? this.error.code : '未知'}`);
+                        });
+                        
+                        e.target.addEventListener('canplay', function() {
+                            updateDebugInfo(`音频可以播放: ${this.src.substring(0, 50)}...`);
+                        });
+                    }
+                });
+                </script>
+                """)
                 
             # 模型和提示选择区域 - 配置AI个性和语音风格
             with gr.Column(scale=1):
@@ -471,9 +731,23 @@ def create_interface():
                 
                 # 语音合成风格选择 - 控制AI回复的语音特征
                 tts_choice = gr.Radio(
-                    ["Standard Voice", "Soft Female Voice", "Energetic Male Voice", "Volcano Engine TTS"],  # 不同语音风格
-                    label="Voice Style Selection",  # 标签
-                    value="Standard Voice"  # 默认使用标准语音
+                    [
+                        "Soft Female Voice - Cancan (Normal)",  # 灿灿音色-标准语速
+                        "Energetic Female Voice - Cancan (Fast)",  # 灿灿音色-快速语调高
+                        "Calm Male Voice - Qingcang (Normal)",  # 擎苍音色-标准语速
+                        "Enthusiastic Male Voice - Qingcang (Fast)",  # 擎苍音色-快速语调高
+                        "Professional Foreign Voice - Stefan (Normal)",  # Stefan音色-标准语速
+                        "Expressive Foreign Voice - Stefan (Fast)"  # Stefan音色-快速语调高
+                    ],
+                    label="Voice Style Selection",  # 标签改为英文
+                    value="Soft Female Voice - Cancan (Normal)"  # 默认使用灿灿标准语速
+                )
+                
+                # 回复语言选择 - 控制AI回复的语言
+                reply_language_choice = gr.Radio(
+                    ["Chinese", "English", "Japanese"],  # 不同回复语言(英文显示)，去掉法语选项
+                    label="Reply Language Selection",  # 标签
+                    value="English"  # 默认使用英文回复
                 )
                 
                 # 清除聊天按钮 - 重置对话历史
@@ -483,7 +757,7 @@ def create_interface():
             chat_history = gr.State([])
             
             # 确保音频输入与聊天函数关联（在定义所有变量后）
-            audio_input.change(fn=handle_chat, inputs=[audio_input, chatbot, lora_path, prompt_choice, promptFormat_choice, tts_choice], outputs=[chatbot, chat_history, audio_output, audio_input])
+            audio_input.change(fn=handle_chat, inputs=[audio_input, chatbot, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice], outputs=[chatbot, chat_history, audio_output, audio_input])
             
             # 添加JavaScript代码，用于浏览器本地TTS
             js_code = """
@@ -510,16 +784,48 @@ def create_interface():
                 
                 // Listen for chat reply updates and add avatars
                 document.addEventListener('DOMContentLoaded', function() {
+                    console.log('音频播放调试(JS): DOM加载完成，开始监听音频元素');
+                    
+                    // 监听音频元素加载
+                    document.addEventListener('play', function(e) {
+                        if (e.target.tagName === 'AUDIO') {
+                            console.log('音频播放调试(JS): 音频开始播放', e.target.src);
+                        }
+                    }, true);
+                    
+                    document.addEventListener('error', function(e) {
+                        if (e.target.tagName === 'AUDIO') {
+                            console.log('音频播放调试(JS): 音频播放错误', e.target.src, e.target.error);
+                        }
+                    }, true);
+                    
+                    // 定期检查音频元素
+                    setInterval(function() {
+                        const audioElements = document.querySelectorAll('audio');
+                        console.log(`音频播放调试(JS): 当前页面有 ${audioElements.length} 个音频元素`);
+                        audioElements.forEach((audio, index) => {
+                            console.log(`音频播放调试(JS): 音频元素 ${index+1}:`, {
+                                src: audio.src,
+                                readyState: audio.readyState,
+                                paused: audio.paused,
+                                ended: audio.ended,
+                                error: audio.error
+                            });
+                        });
+                    }, 5000);
+                    
                     // Regularly check for new chat messages
                     setInterval(function() {
                         // TTS processing
                         const ttsChoice = document.querySelector('input[name="tts_choice"]:checked');
                         if (ttsChoice && ttsChoice.value === "Browser Local TTS") {
+                            console.log('音频播放调试(JS): 使用浏览器本地TTS');
                             const chatMessages = document.querySelectorAll('.message:not(.user)');
                             const lastMessage = chatMessages[chatMessages.length - 1];
                             if (lastMessage && !lastMessage.hasAttribute('data-tts-processed')) {
                                 const messageText = lastMessage.textContent.trim();
                                 if (messageText) {
+                                    console.log('音频播放调试(JS): 尝试使用浏览器TTS播放消息', messageText.substring(0, 50) + '...');
                                     browserTTS(messageText);
                                     lastMessage.setAttribute('data-tts-processed', 'true');
                                 }
@@ -581,7 +887,7 @@ def create_interface():
         submit_btn.click(
             fn=handle_chat,  # 处理函数
             # 输入参数列表
-            inputs=[msg, chatbot, lora_path, prompt_choice, promptFormat_choice, tts_choice],
+            inputs=[msg, chatbot, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice],
             # 输出参数列表
             outputs=[chatbot, chat_history, audio_output, msg],
             api_name="submit"  # API端点名称
@@ -591,7 +897,7 @@ def create_interface():
         msg.submit(
             fn=handle_chat,  # 处理函数
             # 输入参数列表
-            inputs=[msg, chatbot, lora_path, prompt_choice, promptFormat_choice, tts_choice],
+            inputs=[msg, chatbot, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice],
             # 输出参数列表
             outputs=[chatbot, chat_history, audio_output, msg]
         )
@@ -600,7 +906,7 @@ def create_interface():
         audio_input.change(
             fn=handle_audio,  # 处理函数
             # 输入参数列表
-            inputs=[audio_input, chatbot, lora_path, prompt_choice, promptFormat_choice, tts_choice],
+            inputs=[audio_input, chatbot, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice],
             # 输出参数列表
             outputs=[chatbot, chat_history, audio_output, msg],
             api_name="audio"  # API端点名称
@@ -610,7 +916,7 @@ def create_interface():
         audio_input.stop_recording(
             fn=handle_chat,  # 处理函数
             # 确保参数顺序与handle_chat函数定义一致
-            inputs=[msg, chatbot, lora_path, prompt_choice, promptFormat_choice, tts_choice, audio_input],
+            inputs=[msg, chatbot, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice, audio_input],
             # 输出参数列表
             outputs=[chatbot, chat_history, audio_output, msg],
             api_name="mic_recording"  # API端点名称
@@ -620,7 +926,7 @@ def create_interface():
         upload_btn.upload(
             fn=handle_upload,  # 处理函数
             # 输入参数列表
-            inputs=[upload_btn, chatbot, lora_path, prompt_choice, promptFormat_choice, tts_choice],
+            inputs=[upload_btn, chatbot, lora_path, prompt_choice, promptFormat_choice, tts_choice, reply_language_choice],
             # 输出参数列表
             outputs=[chatbot, chat_history, audio_output, msg],
             api_name="upload"  # API端点名称
