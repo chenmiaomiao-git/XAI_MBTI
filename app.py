@@ -271,7 +271,7 @@ def handle_chat(message, history, lora_path, prompt_choice, promptFormat_choice,
     
     # 根据选择的回复语言添加相应的请求（不显示在前端，但传给模型）
     if reply_language_choice == "Chinese":
-        message_with_language_request = message + " 请用中文回答"
+        message_with_language_request = message + " "
     elif reply_language_choice == "English":
         message_with_language_request = message + " Please answer in English"
     elif reply_language_choice == "Japanese":
